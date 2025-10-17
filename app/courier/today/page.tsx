@@ -1,0 +1,331 @@
+"use client"
+
+import { useState } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Phone, MapPin, Package } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+
+interface Delivery {
+  id: string
+  plannedDate: string
+  receiverName: string
+  receiverPhone: string
+  receiverAddress: string
+  status: string
+  zone: string
+  isExpress: boolean
+  parcelCount: number
+  weightKg: number
+  description?: string
+  note?: string
+  totalDue: number
+  sender: {
+    name: string
+    pickupAddress: string
+  }
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  CREATED: "bg-blue-100 text-blue-800",
+  PICKED_UP: "bg-yellow-100 text-yellow-800",
+  DELIVERED: "bg-green-100 text-green-800",
+  PAID: "bg-emerald-100 text-emerald-800",
+  POSTPONED: "bg-orange-100 text-orange-800",
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  CREATED: "À récupérer",
+  PICKED_UP: "Récupérée",
+  DELIVERED: "Livrée",
+  PAID: "Payée",
+  POSTPONED: "Reportée",
+}
+
+export default function CourierTodayPage() {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+  const [postponeDialog, setPostponeDialog] = useState<{ open: boolean; deliveryId: string | null }>({
+    open: false,
+    deliveryId: null,
+  })
+  const [postponeDate, setPostponeDate] = useState("")
+
+  // Get today's date
+  const today = new Date().toISOString().split("T")[0]
+
+  const { data: deliveries = [], isLoading } = useQuery({
+    queryKey: ["courier-deliveries", today],
+    queryFn: async () => {
+      const res = await fetch(`/api/deliveries?date=${today}&assignedToMe=true`)
+      if (!res.ok) throw new Error("Failed to fetch deliveries")
+      return res.json() as Promise<Delivery[]>
+    },
+  })
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await fetch(`/api/deliveries/${id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Failed to update status")
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courier-deliveries"] })
+      toast({ title: "Statut mis à jour" })
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: "destructive" })
+    },
+  })
+
+  const postponeMutation = useMutation({
+    mutationFn: async ({ id, postponedTo }: { id: string; postponedTo: string }) => {
+      const res = await fetch(`/api/deliveries/${id}/postpone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postponedTo }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Failed to postpone delivery")
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courier-deliveries"] })
+      toast({ title: "Livraison reportée" })
+      setPostponeDialog({ open: false, deliveryId: null })
+      setPostponeDate("")
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: "destructive" })
+    },
+  })
+
+  const getNextStatus = (currentStatus: string): string | null => {
+    const transitions: Record<string, string> = {
+      CREATED: "PICKED_UP",
+      PICKED_UP: "DELIVERED",
+      DELIVERED: "PAID",
+    }
+    return transitions[currentStatus] || null
+  }
+
+  const getStatusButtonLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+      CREATED: "Marquer récupérée",
+      PICKED_UP: "Marquer livrée",
+      DELIVERED: "Marquer payée",
+    }
+    return labels[status] || ""
+  }
+
+  const handlePostpone = (deliveryId: string) => {
+    setPostponeDialog({ open: true, deliveryId })
+    // Set minimum date to tomorrow
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    setPostponeDate(tomorrow.toISOString().split("T")[0])
+  }
+
+  const confirmPostpone = () => {
+    if (postponeDialog.deliveryId && postponeDate) {
+      postponeMutation.mutate({
+        id: postponeDialog.deliveryId,
+        postponedTo: postponeDate,
+      })
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-12 text-slate-500">Chargement...</div>
+      </div>
+    )
+  }
+
+  const activeDeliveries = deliveries.filter((d) => !["PAID", "CANCELED", "POSTPONED"].includes(d.status))
+  const completedDeliveries = deliveries.filter((d) => ["PAID", "CANCELED", "POSTPONED"].includes(d.status))
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">Mes livraisons du jour</h1>
+        <p className="text-slate-600 mt-1">{new Date().toLocaleDateString("fr-FR", { dateStyle: "full" })}</p>
+      </div>
+
+      {activeDeliveries.length === 0 && completedDeliveries.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-slate-500">
+            <Package className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+            <p>Aucune livraison assignée pour aujourd'hui</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {activeDeliveries.length > 0 && (
+            <div className="space-y-4 mb-8">
+              <h2 className="text-lg font-semibold text-slate-900">En cours ({activeDeliveries.length})</h2>
+              {activeDeliveries.map((delivery) => (
+                <Card key={delivery.id} className="overflow-hidden">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Badge className={STATUS_COLORS[delivery.status]}>{STATUS_LABELS[delivery.status]}</Badge>
+                        {delivery.isExpress && <Badge variant="secondary">Express</Badge>}
+                        <Badge variant="outline">{delivery.zone}</Badge>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-slate-500">À remettre</div>
+                        <div className="text-lg font-bold text-primary">{delivery.totalDue.toLocaleString()} Ar</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 mb-4">
+                      {delivery.status === "CREATED" && (
+                        <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
+                          <MapPin className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-blue-900">Récupération</div>
+                            <div className="text-sm text-blue-700">{delivery.sender.name}</div>
+                            <div className="text-sm text-blue-600">{delivery.sender.pickupAddress}</div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                        <MapPin className="h-5 w-5 text-slate-600 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-slate-900">Livraison</div>
+                          <div className="text-sm font-medium text-slate-700">{delivery.receiverName}</div>
+                          <div className="text-sm text-slate-600">{delivery.receiverAddress}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                        <Phone className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                        <a
+                          href={`tel:${delivery.receiverPhone}`}
+                          className="text-sm font-medium text-primary hover:underline"
+                        >
+                          {delivery.receiverPhone}
+                        </a>
+                      </div>
+
+                      <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                        <Package className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                        <div className="text-sm text-slate-700">
+                          {delivery.parcelCount} colis • {delivery.weightKg} kg
+                          {delivery.description && ` • ${delivery.description}`}
+                        </div>
+                      </div>
+
+                      {delivery.note && (
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div className="text-sm font-medium text-yellow-900 mb-1">Remarque</div>
+                          <div className="text-sm text-yellow-800">{delivery.note}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      {getNextStatus(delivery.status) && (
+                        <Button
+                          onClick={() =>
+                            updateStatusMutation.mutate({
+                              id: delivery.id,
+                              status: getNextStatus(delivery.status)!,
+                            })
+                          }
+                          disabled={updateStatusMutation.isPending}
+                          className="flex-1"
+                        >
+                          {getStatusButtonLabel(delivery.status)}
+                        </Button>
+                      )}
+                      {["CREATED", "PICKED_UP"].includes(delivery.status) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handlePostpone(delivery.id)}
+                          disabled={postponeMutation.isPending}
+                        >
+                          Reporter
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {completedDeliveries.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-slate-900">Terminées ({completedDeliveries.length})</h2>
+              {completedDeliveries.map((delivery) => (
+                <Card key={delivery.id} className="opacity-60">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-slate-900">{delivery.receiverName}</div>
+                        <div className="text-sm text-slate-600">{delivery.receiverAddress}</div>
+                      </div>
+                      <Badge className={STATUS_COLORS[delivery.status]}>{STATUS_LABELS[delivery.status]}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <Dialog open={postponeDialog.open} onOpenChange={(open) => setPostponeDialog({ open, deliveryId: null })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reporter la livraison</DialogTitle>
+            <DialogDescription>Sélectionnez une nouvelle date pour cette livraison (minimum J+1)</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="postponeDate">Nouvelle date</Label>
+              <Input
+                id="postponeDate"
+                type="date"
+                value={postponeDate}
+                onChange={(e) => setPostponeDate(e.target.value)}
+                min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPostponeDialog({ open: false, deliveryId: null })}>
+              Annuler
+            </Button>
+            <Button onClick={confirmPostpone} disabled={!postponeDate || postponeMutation.isPending}>
+              Confirmer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

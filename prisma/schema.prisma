@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  COURIER
+}
+
+enum DeliveryStatus {
+  CREATED
+  PICKED_UP
+  DELIVERED
+  PAID
+  POSTPONED
+  CANCELED
+}
+
+model User {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  password   String
+  name       String
+  role       Role
+  phone      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deliveries Delivery[] @relation("CourierDeliveries")
+}
+
+model Client {
+  id            String     @id @default(cuid())
+  name          String
+  phone         String
+  pickupAddress String
+  note          String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deliveries    Delivery[] @relation("SenderClient")
+}
+
+model Delivery {
+  id              String         @id @default(cuid())
+  plannedDate     DateTime
+  senderId        String
+  sender          Client         @relation("SenderClient", fields: [senderId], references: [id])
+  receiverName    String
+  receiverPhone   String
+  receiverAddress String
+
+  parcelCount   Int     @default(1)
+  weightKg      Float   @default(1)
+  description   String?
+  note          String?
+
+  collectAmount Int?
+  deliveryPrice Int
+  autoPrice     Int
+  totalDue      Int
+
+  status      DeliveryStatus @default(CREATED)
+  postponedTo DateTime?
+
+  courierId String?
+  courier   User?   @relation("CourierDeliveries", fields: [courierId], references: [id])
+
+  isExpress Boolean @default(false)
+  zone      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
