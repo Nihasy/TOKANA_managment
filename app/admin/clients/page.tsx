@@ -25,7 +25,20 @@ interface Client {
   name: string
   phone: string
   pickupAddress: string
+  pickupZone: "TANA_VILLE" | "PERIPHERIE" | "SUPER_PERIPHERIE"
   note?: string
+}
+
+const zoneLabels = {
+  TANA_VILLE: "Tana-Ville",
+  PERIPHERIE: "Périphérie",
+  SUPER_PERIPHERIE: "Super-Périphérie",
+}
+
+const zoneColors = {
+  TANA_VILLE: "bg-blue-100 text-blue-800",
+  PERIPHERIE: "bg-orange-100 text-orange-800",
+  SUPER_PERIPHERIE: "bg-purple-100 text-purple-800",
 }
 
 export default function ClientsPage() {
@@ -114,6 +127,7 @@ export default function ClientsPage() {
                 <TableRow>
                   <TableHead>Nom</TableHead>
                   <TableHead>Téléphone</TableHead>
+                  <TableHead>Zone</TableHead>
                   <TableHead>Adresse de récupération</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -124,6 +138,11 @@ export default function ClientsPage() {
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">{client.name}</TableCell>
                     <TableCell>{client.phone}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${zoneColors[client.pickupZone]}`}>
+                        {zoneLabels[client.pickupZone]}
+                      </span>
+                    </TableCell>
                     <TableCell>{client.pickupAddress}</TableCell>
                     <TableCell className="text-slate-500">{client.note || "-"}</TableCell>
                     <TableCell className="text-right">

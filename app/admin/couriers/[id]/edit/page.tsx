@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
@@ -11,9 +11,10 @@ import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 
-export default function EditCourierPage({ params }: { params: { id: string } }) {
+export default function EditCourierPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { id } = use(params)
   const [formData, setFormData] = useState({
     email: "",
     name: "",
@@ -22,12 +23,11 @@ export default function EditCourierPage({ params }: { params: { id: string } }) 
   })
 
   const { data: courier, isLoading } = useQuery({
-    queryKey: ["courier", params.id],
+    queryKey: ["courier", id],
     queryFn: async () => {
-      const res = await fetch(`/api/couriers`)
+      const res = await fetch(`/api/couriers/${id}`)
       if (!res.ok) throw new Error("Failed to fetch courier")
-      const couriers = await res.json()
-      return couriers.find((c: any) => c.id === params.id)
+      return res.json()
     },
   })
 
@@ -44,7 +44,7 @@ export default function EditCourierPage({ params }: { params: { id: string } }) 
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/couriers/${params.id}`, {
+      const res = await fetch(`/api/couriers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),

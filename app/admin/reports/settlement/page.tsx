@@ -1,14 +1,23 @@
 "use client"
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileDown, Calculator } from "lucide-react"
+import { FileDown, Calculator, CheckCircle2, DollarSign } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Delivery {
   id: string
@@ -18,6 +27,7 @@ interface Delivery {
   collectAmount: number
   totalDue: number
   courierRemarks?: string
+  courierSettled: boolean
   courier?: {
     name: string
   }
@@ -34,12 +44,17 @@ interface SettlementData {
     totalDeliveryFees: number
     totalARemettre: number
   }
+  allCourierSettled: boolean
 }
 
 export default function SettlementReportPage() {
   const today = new Date().toISOString().split("T")[0]
-  const [date, setDate] = useState(today)
+  const [startDate, setStartDate] = useState(today)
+  const [endDate, setEndDate] = useState(today)
   const [courierId, setCourierId] = useState("")
+  const [confirmDialog, setConfirmDialog] = useState(false)
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
 
   // Fetch couriers
   const { data: couriers = [] } = useQuery({
@@ -53,15 +68,50 @@ export default function SettlementReportPage() {
 
   // Fetch settlement data
   const { data: settlementData, isLoading } = useQuery<SettlementData>({
-    queryKey: ["settlement", date, courierId],
+    queryKey: ["settlement", startDate, endDate, courierId],
     queryFn: async () => {
       if (!courierId) return null
-      const params = new URLSearchParams({ date, courierId })
+      const params = new URLSearchParams({ startDate, endDate, courierId })
       const res = await fetch(`/api/reports/settlement?${params}`)
       if (!res.ok) throw new Error("Failed to fetch settlement data")
       return res.json()
     },
     enabled: !!courierId,
+  })
+
+  // Confirm courier settlement mutation
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      if (!settlementData) return
+      const deliveryIds = settlementData.deliveries
+        .filter((d) => !d.courierSettled)
+        .map((d) => d.id)
+      const res = await fetch("/api/reports/settlement/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveryIds }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Failed to confirm settlement")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settlement"] })
+      toast({
+        title: "✅ Règlement confirmé",
+        description: "La réception de l'argent du livreur a été confirmée",
+      })
+      setConfirmDialog(false)
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erreur",
+        description: error.message,
+        variant: "destructive",
+      })
+    },
   })
 
   const exportToCSV = () => {
@@ -102,7 +152,7 @@ export default function SettlementReportPage() {
     const link = document.createElement("a")
     const url = URL.createObjectURL(blob)
     link.setAttribute("href", url)
-    link.setAttribute("download", `reglement_${courierName}_${date}.csv`)
+    link.setAttribute("download", `reglement_${courierName}_${startDate}_${endDate}.csv`)
     link.style.visibility = "hidden"
     document.body.appendChild(link)
     link.click()
@@ -121,10 +171,15 @@ export default function SettlementReportPage() {
           <CardTitle>Filtres</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="date">Date</Label>
-              <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Label htmlFor="startDate">Date de début</Label>
+              <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="endDate">Date de fin</Label>
+              <Input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
 
             <div className="space-y-2">
@@ -207,6 +262,55 @@ export default function SettlementReportPage() {
             </Card>
           </div>
 
+          {/* Confirmation Button */}
+          {!settlementData.allCourierSettled && (
+            <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 mb-6">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="h-6 w-6 text-green-600 mt-1" />
+                    <div>
+                      <h3 className="font-semibold text-slate-900 mb-1">
+                        Confirmer la réception de l'argent
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        Le livreur {couriers.find((c: any) => c.id === courierId)?.name} doit vous remettre{" "}
+                        <span className="font-bold text-green-700">
+                          {settlementData.summary.totalARemettre.toLocaleString()} Ar
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => setConfirmDialog(true)}
+                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Confirmer réception
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {settlementData.allCourierSettled && (
+            <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 mb-6">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  <div>
+                    <h3 className="font-semibold text-green-900">
+                      ✅ Règlement confirmé
+                    </h3>
+                    <p className="text-sm text-green-700">
+                      L'argent a été reçu du livreur et enregistré
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Détail des livraisons</CardTitle>
@@ -271,6 +375,87 @@ export default function SettlementReportPage() {
           </Card>
         </>
       )}
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmer la réception de l'argent</DialogTitle>
+            <DialogDescription>
+              Confirmez que vous avez reçu l'argent du livreur
+            </DialogDescription>
+          </DialogHeader>
+          {settlementData && (
+            <div className="py-4">
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg mb-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <DollarSign className="h-8 w-8 text-green-600" />
+                  <div>
+                    <div className="font-semibold text-slate-900">
+                      {couriers.find((c: any) => c.id === courierId)?.name}
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {settlementData.summary.nbLivraisons} livraison(s) - Du {new Date(startDate).toLocaleDateString("fr-FR")} au {new Date(endDate).toLocaleDateString("fr-FR")}
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Montants collectés:</span>
+                    <span className="font-semibold">{settlementData.summary.totalCollect.toLocaleString()} Ar</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Frais de livraison:</span>
+                    <span className="font-semibold">{settlementData.summary.totalDeliveryFees.toLocaleString()} Ar</span>
+                  </div>
+                  <div className="border-t border-green-200 pt-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-700 font-semibold">Total à recevoir:</span>
+                      <span className="text-2xl font-bold text-green-700">
+                        {settlementData.summary.totalARemettre.toLocaleString()} Ar
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-amber-600 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    Cette action enregistrera que vous avez reçu l'argent du livreur. Cette opération est irréversible.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDialog(false)}
+              className="cursor-pointer"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={() => confirmMutation.mutate()}
+              disabled={confirmMutation.isPending}
+              className="bg-gradient-to-r from-green-600 to-emerald-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {confirmMutation.isPending ? (
+                <>
+                  <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Confirmation...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Confirmer la réception
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

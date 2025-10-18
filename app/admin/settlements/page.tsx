@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DollarSign,
   Package,
@@ -40,7 +41,9 @@ interface ClientSettlement {
     collectAmount: number | null;
     deliveryPrice: number;
     isPrepaid: boolean;
+    deliveryFeePrepaid: boolean;
     isSettled: boolean;
+    settlementType: string | null;
     courier: {
       name: string;
     } | null;
@@ -59,9 +62,16 @@ interface SettlementsData {
 }
 
 export default function SettlementsPage() {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split("T")[0]
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"pending" | "settled" | "all">("pending");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [maxDate, setMaxDate] = useState<string>(yesterdayStr);
+  const [settlementType, setSettlementType] = useState<string>("CASH_COURIER");
   const [settleDialog, setSettleDialog] = useState<{
     open: boolean;
     client: ClientSettlement | null;
@@ -72,9 +82,9 @@ export default function SettlementsPage() {
 
   // Fetch settlements data
   const { data, isLoading } = useQuery<SettlementsData>({
-    queryKey: ["settlements", filter],
+    queryKey: ["settlements", filter, maxDate],
     queryFn: async () => {
-      const res = await fetch(`/api/settlements?filter=${filter}`);
+      const res = await fetch(`/api/settlements?filter=${filter}&maxDate=${maxDate}`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || "Erreur lors du chargement des règlements");
@@ -86,11 +96,11 @@ export default function SettlementsPage() {
 
   // Settle mutation
   const settleMutation = useMutation({
-    mutationFn: async (deliveryIds: string[]) => {
+    mutationFn: async ({ deliveryIds, settlementType }: { deliveryIds: string[], settlementType: string }) => {
       const res = await fetch("/api/settlements/settle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliveryIds }),
+        body: JSON.stringify({ deliveryIds, settlementType }),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -105,6 +115,7 @@ export default function SettlementsPage() {
         description: "Les livraisons ont été marquées comme réglées",
       });
       setSettleDialog({ open: false, client: null });
+      setSettlementType("CASH_COURIER"); // Reset
     },
     onError: (error: Error) => {
       toast({
@@ -120,7 +131,7 @@ export default function SettlementsPage() {
       const deliveryIds = settleDialog.client.deliveries
         .filter((d) => !d.isSettled)
         .map((d) => d.id);
-      settleMutation.mutate(deliveryIds);
+      settleMutation.mutate({ deliveryIds, settlementType });
     }
   };
 
@@ -129,9 +140,9 @@ export default function SettlementsPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 shadow-lg">
-            <h1 className="text-2xl font-bold text-white">Règlements clients</h1>
+            <h1 className="text-2xl font-bold text-white">Règlements clients J+1</h1>
             <p className="text-purple-100 mt-1">
-              Gestion des versements aux expéditeurs (J+1)
+              Versements aux clients le lendemain de la livraison
             </p>
           </div>
           <Card>
@@ -155,10 +166,17 @@ export default function SettlementsPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 shadow-lg">
-          <h1 className="text-2xl font-bold text-white">Règlements clients</h1>
+          <h1 className="text-2xl font-bold text-white">Règlements clients J+1</h1>
           <p className="text-purple-100 mt-1">
-            Gestion des versements aux expéditeurs (J+1)
+            Versements aux clients le lendemain de la livraison
           </p>
+          <div className="mt-3 flex items-start gap-2 bg-white/10 rounded-lg p-3">
+            <AlertCircle className="h-5 w-5 text-white/90 mt-0.5" />
+            <p className="text-sm text-white/90">
+              Seules les livraisons payées (PAID) dont la date prévue est passée sont affichées.
+              Les montants positifs sont à remettre au client, les montants négatifs sont des frais à collecter.
+            </p>
+          </div>
         </div>
 
         {/* Summary Cards */}
@@ -214,32 +232,83 @@ export default function SettlementsPage() {
           </div>
         )}
 
-        {/* Filter Tabs */}
-        <div className="flex gap-2 mb-6">
-          <Button
-            variant={filter === "pending" ? "default" : "outline"}
-            onClick={() => setFilter("pending")}
-            className={`cursor-pointer ${filter === "pending" ? "bg-gradient-to-r from-purple-600 to-pink-600" : ""}`}
-          >
-            <AlertCircle className="h-4 w-4 mr-2" />
-            En attente
-          </Button>
-          <Button
-            variant={filter === "settled" ? "default" : "outline"}
-            onClick={() => setFilter("settled")}
-            className={`cursor-pointer ${filter === "settled" ? "bg-gradient-to-r from-green-600 to-emerald-600" : ""}`}
-          >
-            <CheckCircle2 className="h-4 w-4 mr-2" />
-            Réglées
-          </Button>
-          <Button
-            variant={filter === "all" ? "default" : "outline"}
-            onClick={() => setFilter("all")}
-            className="cursor-pointer"
-          >
-            Toutes
-          </Button>
+        {/* Filter Tabs and Date */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex gap-2 flex-1">
+            <Button
+              variant={filter === "pending" ? "default" : "outline"}
+              onClick={() => setFilter("pending")}
+              className={`cursor-pointer ${filter === "pending" ? "bg-gradient-to-r from-purple-600 to-pink-600" : ""}`}
+            >
+              <AlertCircle className="h-4 w-4 mr-2" />
+              En attente
+            </Button>
+            <Button
+              variant={filter === "settled" ? "default" : "outline"}
+              onClick={() => setFilter("settled")}
+              className={`cursor-pointer ${filter === "settled" ? "bg-gradient-to-r from-green-600 to-emerald-600" : ""}`}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Réglées
+            </Button>
+            <Button
+              variant={filter === "all" ? "default" : "outline"}
+              onClick={() => setFilter("all")}
+              className="cursor-pointer"
+            >
+              Toutes
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 md:w-72">
+            <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
+              <Calendar className="h-4 w-4 inline mr-1" />
+              Livraisons jusqu'au :
+            </label>
+            <input
+              type="date"
+              value={maxDate}
+              onChange={(e) => setMaxDate(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
         </div>
+
+        {/* Client Selector */}
+        {data && data.clients.length > 0 && (
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">
+                    Filtrer par client
+                  </label>
+                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tous les clients" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les clients</SelectItem>
+                      {data.clients.map((clientData) => (
+                        <SelectItem key={clientData.client.id} value={clientData.client.id}>
+                          {clientData.client.name} - {clientData.totalToSettle >= 0 ? "+" : ""}{clientData.totalToSettle.toLocaleString()} Ar
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedClientId && selectedClientId !== "all" && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedClientId("all")}
+                    className="cursor-pointer mt-7"
+                  >
+                    Afficher tous
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Client Settlements List */}
         {data && data.clients.length === 0 ? (
@@ -251,7 +320,11 @@ export default function SettlementsPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {data?.clients.map((clientData) => (
+            {data?.clients
+              .filter((clientData) => 
+                !selectedClientId || selectedClientId === "all" || clientData.client.id === selectedClientId
+              )
+              .map((clientData) => (
               <Card
                 key={clientData.client.id}
                 className="border-l-4 border-l-purple-500 shadow-md hover:shadow-lg transition-shadow"
@@ -266,12 +339,16 @@ export default function SettlementsPage() {
                         <Badge
                           className={
                             clientData.deliveries.some((d) => !d.isSettled)
-                              ? "bg-orange-100 text-orange-800"
+                              ? clientData.totalToSettle >= 0
+                                ? "bg-orange-100 text-orange-800"
+                                : "bg-red-100 text-red-800"
                               : "bg-green-100 text-green-800"
                           }
                         >
                           {clientData.deliveries.filter((d) => !d.isSettled).length > 0
-                            ? `${clientData.deliveries.filter((d) => !d.isSettled).length} à régler`
+                            ? clientData.totalToSettle >= 0
+                              ? `${clientData.deliveries.filter((d) => !d.isSettled).length} à remettre`
+                              : `${clientData.deliveries.filter((d) => !d.isSettled).length} débit(s)`
                             : "Réglé"}
                         </Badge>
                       </CardTitle>
@@ -287,12 +364,18 @@ export default function SettlementsPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-slate-600">À remettre</div>
-                      <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                        {clientData.totalToSettle.toLocaleString()} Ar
+                      <div className="text-sm text-slate-600">
+                        {clientData.totalToSettle >= 0 ? "À remettre" : "Débit client"}
+                      </div>
+                      <div className={`text-2xl font-bold ${
+                        clientData.totalToSettle >= 0 
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600" 
+                          : "bg-gradient-to-r from-red-600 to-orange-600"
+                      } bg-clip-text text-transparent`}>
+                        {clientData.totalToSettle >= 0 ? "+" : ""}{clientData.totalToSettle.toLocaleString()} Ar
                       </div>
                       <div className="text-xs text-slate-500 mt-1">
-                        Frais: {clientData.totalDeliveryFees.toLocaleString()} Ar
+                        Frais collectés: {clientData.totalDeliveryFees.toLocaleString()} Ar
                       </div>
                     </div>
                   </div>
@@ -320,10 +403,24 @@ export default function SettlementsPage() {
                                   Prépayé
                                 </Badge>
                               )}
-                              {delivery.isSettled && (
+                              {delivery.deliveryFeePrepaid && (
                                 <Badge className="bg-green-100 text-green-800 text-xs">
-                                  ✓ Réglé
+                                  Frais payés ✓
                                 </Badge>
+                              )}
+                              {delivery.isSettled && (
+                                <>
+                                  <Badge className="bg-green-100 text-green-800 text-xs">
+                                    ✓ Réglé
+                                  </Badge>
+                                  {delivery.settlementType && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {delivery.settlementType === "CASH_COURIER" && "💵 Cash livreur"}
+                                      {delivery.settlementType === "MOBILE_MONEY" && "📱 Mobile Money"}
+                                      {delivery.settlementType === "OFFICE_PICKUP" && "🏢 Siège"}
+                                    </Badge>
+                                  )}
+                                </>
                               )}
                             </div>
                             <div className="text-xs text-slate-600">
@@ -344,25 +441,61 @@ export default function SettlementsPage() {
                           </div>
                           <div className="text-right">
                             {delivery.isPrepaid ? (
-                              <div className="text-sm text-slate-600">
-                                <div className="text-xs">Frais uniquement</div>
-                                <div className="font-semibold">
-                                  {delivery.deliveryPrice.toLocaleString()} Ar
+                              // Livraison prépayée
+                              delivery.deliveryFeePrepaid ? (
+                                // Tout est payé
+                                <div className="text-sm text-slate-600">
+                                  <div className="text-xs">Tout payé d'avance</div>
+                                  <div className="font-semibold text-green-700">
+                                    0 Ar
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    Frais: {delivery.deliveryPrice.toLocaleString()} Ar ✓
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                // Client doit payer les frais
+                                <div className="text-sm text-red-600">
+                                  <div className="text-xs">Débit (frais)</div>
+                                  <div className="font-semibold">
+                                    -{delivery.deliveryPrice.toLocaleString()} Ar
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    Livraison prépayée
+                                  </div>
+                                </div>
+                              )
                             ) : (
-                              <div className="text-sm">
-                                <div className="text-xs text-slate-600">Collecté</div>
-                                <div className="font-semibold text-purple-700">
-                                  {delivery.collectAmount?.toLocaleString() || 0} Ar
+                              // Livraison non prépayée
+                              delivery.deliveryFeePrepaid ? (
+                                // Frais déjà payés, on rend tout
+                                <div className="text-sm">
+                                  <div className="text-xs text-slate-600">Collecté</div>
+                                  <div className="font-semibold text-purple-700">
+                                    {delivery.collectAmount?.toLocaleString() || 0} Ar
+                                  </div>
+                                  <div className="text-xs text-green-600">
+                                    Frais: {delivery.deliveryPrice.toLocaleString()} Ar ✓
+                                  </div>
+                                  <div className="text-xs font-semibold text-green-700 mt-1">
+                                    À remettre: {(delivery.collectAmount || 0).toLocaleString()} Ar
+                                  </div>
                                 </div>
-                                <div className="text-xs text-slate-500">
-                                  - {delivery.deliveryPrice.toLocaleString()} Ar frais
+                              ) : (
+                                // On déduit les frais
+                                <div className="text-sm">
+                                  <div className="text-xs text-slate-600">Collecté</div>
+                                  <div className="font-semibold text-purple-700">
+                                    {delivery.collectAmount?.toLocaleString() || 0} Ar
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    - {delivery.deliveryPrice.toLocaleString()} Ar frais
+                                  </div>
+                                  <div className="text-xs font-semibold text-green-700 mt-1">
+                                    = {((delivery.collectAmount || 0) - delivery.deliveryPrice).toLocaleString()} Ar
+                                  </div>
                                 </div>
-                                <div className="text-xs font-semibold text-green-700 mt-1">
-                                  = {((delivery.collectAmount || 0) - delivery.deliveryPrice).toLocaleString()} Ar
-                                </div>
-                              </div>
+                              )
                             )}
                           </div>
                         </div>
@@ -376,10 +509,16 @@ export default function SettlementsPage() {
                       onClick={() =>
                         setSettleDialog({ open: true, client: clientData })
                       }
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 cursor-pointer"
+                      className={`w-full cursor-pointer ${
+                        clientData.totalToSettle >= 0
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                          : "bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
+                      }`}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Marquer comme réglé ({clientData.totalToSettle.toLocaleString()} Ar)
+                      {clientData.totalToSettle >= 0
+                        ? `Remettre ${clientData.totalToSettle.toLocaleString()} Ar au client`
+                        : `Collecter ${Math.abs(clientData.totalToSettle).toLocaleString()} Ar du client`}
                     </Button>
                   )}
                 </CardContent>
@@ -400,30 +539,69 @@ export default function SettlementsPage() {
           <DialogHeader>
             <DialogTitle>Confirmer le règlement</DialogTitle>
             <DialogDescription>
-              Confirmez que vous avez remis les fonds au client
+              {settleDialog.client && settleDialog.client.totalToSettle >= 0
+                ? "Confirmez que vous avez remis les fonds au client"
+                : "Confirmez que vous avez collecté les frais auprès du client"}
             </DialogDescription>
           </DialogHeader>
           {settleDialog.client && (
             <div className="py-4">
-              <div className="bg-purple-50 p-4 rounded-lg mb-4">
-                <div className="font-semibold text-purple-900 mb-2">
+              <div className={`${
+                settleDialog.client.totalToSettle >= 0 
+                  ? "bg-purple-50 border-purple-200" 
+                  : "bg-red-50 border-red-200"
+              } p-4 rounded-lg mb-4 border`}>
+                <div className="font-semibold text-slate-900 mb-2">
                   {settleDialog.client.client.name}
                 </div>
                 <div className="text-sm text-slate-600 mb-3">
                   {settleDialog.client.deliveries.filter((d) => !d.isSettled).length} livraison(s)
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-sm text-slate-600">Montant à remettre:</span>
-                  <span className="text-2xl font-bold text-purple-600">
+                  <span className="text-sm text-slate-600">
+                    {settleDialog.client.totalToSettle >= 0 ? "Montant à remettre:" : "Montant à collecter:"}
+                  </span>
+                  <span className={`text-2xl font-bold ${
+                    settleDialog.client.totalToSettle >= 0 ? "text-purple-600" : "text-red-600"
+                  }`}>
+                    {settleDialog.client.totalToSettle >= 0 ? "+" : ""}
                     {settleDialog.client.totalToSettle.toLocaleString()} Ar
                   </span>
                 </div>
               </div>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+
+              {/* Settlement Type Selector */}
+              <div className="mb-4">
+                <label className="text-sm font-medium text-slate-700 mb-2 block">
+                  Type de remise
+                </label>
+                <Select value={settlementType} onValueChange={setSettlementType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH_COURIER">💵 Cash livré par livreur</SelectItem>
+                    <SelectItem value="MOBILE_MONEY">📱 Mobile Money</SelectItem>
+                    <SelectItem value="OFFICE_PICKUP">🏢 Récupéré au siège par le client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className={`${
+                settleDialog.client.totalToSettle >= 0 
+                  ? "bg-amber-50 border-amber-200" 
+                  : "bg-orange-50 border-orange-200"
+              } rounded-lg p-3 border`}>
                 <div className="flex items-start gap-2">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div className="text-sm text-amber-800">
-                    Cette action marquera toutes les livraisons de ce client comme réglées.
+                  <AlertCircle className={`h-5 w-5 mt-0.5 ${
+                    settleDialog.client.totalToSettle >= 0 ? "text-amber-600" : "text-orange-600"
+                  }`} />
+                  <div className={`text-sm ${
+                    settleDialog.client.totalToSettle >= 0 ? "text-amber-800" : "text-orange-800"
+                  }`}>
+                    {settleDialog.client.totalToSettle >= 0 
+                      ? "Cette action marquera toutes les livraisons de ce client comme réglées."
+                      : "Cette action enregistrera le paiement des frais par le client et marquera les livraisons comme réglées."}
                   </div>
                 </div>
               </div>

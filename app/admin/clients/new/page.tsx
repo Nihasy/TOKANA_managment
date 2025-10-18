@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
@@ -21,6 +22,7 @@ export default function NewClientPage() {
     name: "",
     phone: "",
     pickupAddress: "",
+    pickupZone: "TANA_VILLE" as "TANA_VILLE" | "PERIPHERIE" | "SUPER_PERIPHERIE",
     note: "",
   })
 
@@ -96,6 +98,27 @@ export default function NewClientPage() {
                 disabled={isLoading}
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pickupZone">Zone de récupération *</Label>
+              <Select
+                value={formData.pickupZone}
+                onValueChange={(value) => setFormData({ ...formData, pickupZone: value as "TANA_VILLE" | "PERIPHERIE" | "SUPER_PERIPHERIE" })}
+                disabled={isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner une zone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TANA_VILLE">Tana-Ville</SelectItem>
+                  <SelectItem value="PERIPHERIE">Périphérie</SelectItem>
+                  <SelectItem value="SUPER_PERIPHERIE">Super-Périphérie</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-slate-500">
+                Cette catégorie permet de mieux organiser les récupérations selon la localisation
+              </p>
             </div>
 
             <div className="space-y-2">

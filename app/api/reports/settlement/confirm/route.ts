@@ -3,37 +3,33 @@ import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/auth-utils"
 import { z } from "zod"
 
-const settleSchema = z.object({
+const confirmSchema = z.object({
   deliveryIds: z.array(z.string()).min(1, "Au moins une livraison doit être sélectionnée"),
-  settlementType: z.enum(["CASH_COURIER", "MOBILE_MONEY", "OFFICE_PICKUP"], {
-    required_error: "Le type de remise est requis",
-  }),
 })
 
 export async function POST(request: Request) {
   try {
     const session = await requireAdmin()
     const body = await request.json()
-    const { deliveryIds, settlementType } = settleSchema.parse(body)
+    const { deliveryIds } = confirmSchema.parse(body)
 
-    // Marquer les livraisons comme réglées
+    // Marquer les livraisons comme réglées côté livreur (argent reçu)
     await prisma.delivery.updateMany({
       where: {
         id: { in: deliveryIds },
         status: "PAID",
-        isSettled: false,
+        courierSettled: false,
       },
       data: {
-        isSettled: true,
-        settledAt: new Date(),
-        settledBy: session.user.id,
-        settlementType: settlementType,
+        courierSettled: true,
+        courierSettledAt: new Date(),
+        courierSettledBy: session.user.id,
       },
     })
 
     return NextResponse.json({
       success: true,
-      message: `${deliveryIds.length} livraison(s) marquée(s) comme réglée(s)`,
+      message: `${deliveryIds.length} règlement(s) livreur confirmé(s)`,
     })
   } catch (error) {
     if (error instanceof Error) {

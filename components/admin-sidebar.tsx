@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Users, Package, Truck, FileText, LayoutDashboard } from "lucide-react"
+import { Users, Package, Truck, FileText, LayoutDashboard, DollarSign, Calculator } from "lucide-react"
 import { LogoutButton } from "./logout-button"
 
 const navigation = [
@@ -11,7 +11,8 @@ const navigation = [
   { name: "Clients", href: "/admin/clients", icon: Users },
   { name: "Livreurs", href: "/admin/couriers", icon: Truck },
   { name: "Livraisons", href: "/admin/deliveries", icon: Package },
-  { name: "Règlement", href: "/admin/reports/settlement", icon: FileText },
+  { name: "Règlement du soir", href: "/admin/reports/settlement", icon: Calculator },
+  { name: "Règlements J+1", href: "/admin/settlements", icon: DollarSign },
 ]
 
 export function AdminSidebar() {

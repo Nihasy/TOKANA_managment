@@ -3,6 +3,29 @@ import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/auth-utils"
 import { clientSchema } from "@/lib/validations/client"
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAdmin()
+
+    const { id } = await params
+
+    const client = await prisma.client.findUnique({
+      where: { id },
+    })
+
+    if (!client) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(client)
+  } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()

@@ -80,9 +80,15 @@ export async function POST(request: Request) {
       isExpress: validatedData.isExpress,
     });
 
-    // Calculate total due
-    const totalDue =
-      validatedData.deliveryPrice + (validatedData.collectAmount || 0);
+    // Calculate total due (montant que le destinataire doit payer au livreur)
+    const deliveryFeePrepaid = validatedData.deliveryFeePrepaid || false;
+    const isPrepaid = validatedData.isPrepaid || false;
+    
+    const totalDue = deliveryFeePrepaid 
+      ? (isPrepaid ? 0 : (validatedData.collectAmount || 0))  // Si frais prépayés, seul le montant du produit
+      : (isPrepaid 
+          ? validatedData.deliveryPrice  // Si isPrepaid, seulement les frais
+          : validatedData.deliveryPrice + (validatedData.collectAmount || 0));  // Sinon tout
 
     const delivery = await prisma.delivery.create({
       data: {
@@ -100,7 +106,8 @@ export async function POST(request: Request) {
         autoPrice,
         deliveryPrice: validatedData.deliveryPrice,
         collectAmount: validatedData.collectAmount,
-        isPrepaid: validatedData.isPrepaid || false,
+        isPrepaid,
+        deliveryFeePrepaid,
         totalDue,
         courierId: validatedData.courierId,
         status: "CREATED",

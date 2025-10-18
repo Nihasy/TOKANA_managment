@@ -17,6 +17,7 @@ export const deliverySchema = z.object({
   deliveryPrice: z.number().int().min(0, "Le prix de livraison doit être positif"),
   collectAmount: z.number().int().min(0).optional(),
   isPrepaid: z.boolean().optional(),
+  deliveryFeePrepaid: z.boolean().optional(),
   courierId: z.string().optional(),
 })
 
