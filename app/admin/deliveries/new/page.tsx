@@ -42,6 +42,7 @@ export default function NewDeliveryPage() {
     deliveryPrice: 0,
     collectAmount: 0,
     isPrepaid: false,
+    deliveryFeePrepaid: false,
     courierId: "UNASSIGNED",
   })
 
@@ -67,12 +68,21 @@ export default function NewDeliveryPage() {
 
   // Calculate auto price when zone, weight, or express changes
   useEffect(() => {
-    const autoPrice = computePrice({
-      zone: formData.zone,
-      weightKg: formData.weightKg,
-      isExpress: formData.isExpress,
-    })
-    setFormData((prev) => ({ ...prev, deliveryPrice: autoPrice }))
+    // Only calculate if we have valid data
+    if (!formData.zone || !formData.weightKg) {
+      return
+    }
+    
+    try {
+      const autoPrice = computePrice({
+        zone: formData.zone,
+        weightKg: formData.weightKg,
+        isExpress: formData.isExpress,
+      })
+      setFormData((prev) => ({ ...prev, deliveryPrice: autoPrice }))
+    } catch (error) {
+      console.error('❌ Erreur lors du calcul du prix:', error)
+    }
   }, [formData.zone, formData.weightKg, formData.isExpress])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,7 +116,17 @@ export default function NewDeliveryPage() {
     }
   }
 
-  const totalDue = formData.deliveryPrice + (formData.collectAmount || 0)
+  // Calcul du montant total que le destinataire doit payer au livreur
+  const totalDue = formData.deliveryFeePrepaid 
+    ? (formData.isPrepaid ? 0 : (formData.collectAmount || 0))  // Si frais prépayés, seul le montant du produit
+    : (formData.isPrepaid 
+        ? formData.deliveryPrice  // Si isPrepaid, seulement les frais
+        : formData.deliveryPrice + (formData.collectAmount || 0))  // Sinon tout
+  
+  // Calcul du montant à remettre au client (peut être négatif = débit)
+  const amountToReturnToClient = formData.deliveryFeePrepaid
+    ? (formData.collectAmount || 0) - formData.deliveryPrice  // Si frais prépayés, on déduit les frais
+    : (formData.collectAmount || 0)  // Sinon, montant collecté sans les frais
 
   return (
     <div className="p-8">
@@ -369,34 +389,88 @@ export default function NewDeliveryPage() {
                 Si coché, seuls les frais de livraison seront collectés
               </p>
 
+              <div className="flex items-center space-x-2 pt-2 mt-2 border-t pt-4">
+                <Checkbox
+                  id="deliveryFeePrepaid"
+                  checked={formData.deliveryFeePrepaid}
+                  onCheckedChange={(checked) => 
+                    setFormData({ ...formData, deliveryFeePrepaid: checked === true })
+                  }
+                  disabled={isLoading}
+                />
+                <Label 
+                  htmlFor="deliveryFeePrepaid" 
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  Frais de livraison déjà payés par le client
+                </Label>
+              </div>
+              <p className="text-xs text-slate-500 ml-6">
+                Si coché, les frais ne seront PAS collectés auprès du destinataire et seront déduits du règlement au client
+              </p>
+
               <div className="pt-4 border-t">
-                <div className="space-y-2">
-                  {!formData.isPrepaid && formData.collectAmount > 0 && (
+                <div className="space-y-3">
+                  {/* Affichage du total à collecter auprès du destinataire */}
+                  <div className={`p-3 rounded ${formData.deliveryFeePrepaid ? 'bg-purple-50 border border-purple-200' : 'bg-blue-50 border border-blue-200'}`}>
+                    <p className="text-sm font-medium mb-1">💰 Total à collecter auprès du destinataire:</p>
+                    <p className="text-2xl font-bold text-purple-900">{(totalDue || 0).toLocaleString()} Ar</p>
+                    {formData.deliveryFeePrepaid && (
+                      <p className="text-xs text-purple-700 mt-1">⚠️ Frais prépayés : uniquement le montant du produit</p>
+                    )}
+                  </div>
+
+                  {/* Calcul détaillé */}
+                  {formData.deliveryFeePrepaid ? (
+                    // Cas: Frais de livraison prépayés
+                    <div className="bg-slate-50 p-3 rounded space-y-2">
+                      <p className="text-sm font-medium text-slate-700">📊 Détail du règlement au client:</p>
+                      <div className="flex justify-between text-sm">
+                        <span>Montant collecté</span>
+                        <span className="font-medium">{(formData.collectAmount || 0).toLocaleString()} Ar</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span>- Frais de livraison (déjà payés)</span>
+                        <span className="font-medium">- {(formData.deliveryPrice || 0).toLocaleString()} Ar</span>
+                      </div>
+                      <div className={`flex justify-between text-lg font-bold pt-2 border-t ${amountToReturnToClient >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <span>{amountToReturnToClient >= 0 ? '✅ À remettre au client:' : '⚠️ Débit client (à payer):'}</span>
+                        <span>{Math.abs(amountToReturnToClient).toLocaleString()} Ar</span>
+                      </div>
+                      {amountToReturnToClient < 0 && (
+                        <p className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                          ⚠️ Le client doit {Math.abs(amountToReturnToClient).toLocaleString()} Ar car les frais dépassent le montant collecté
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    // Cas normal: Frais collectés auprès du destinataire
                     <>
-                      <div className="flex justify-between items-center text-sm text-slate-600">
-                        <span>Montant collecté:</span>
-                        <span>{((formData.collectAmount || 0) + (formData.deliveryPrice || 0)).toLocaleString()} Ar</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm text-slate-600">
-                        <span>Frais de livraison à retenir:</span>
-                        <span>- {(formData.deliveryPrice || 0).toLocaleString()} Ar</span>
-                      </div>
-                      <div className="flex justify-between items-center text-lg font-semibold text-green-600 pt-2 border-t">
-                        <span>À remettre au client:</span>
-                        <span>{(formData.collectAmount || 0).toLocaleString()} Ar</span>
-                      </div>
+                      {!formData.isPrepaid && formData.collectAmount > 0 && (
+                        <div className="bg-green-50 p-3 rounded space-y-2">
+                          <p className="text-sm font-medium text-green-700">📊 Détail:</p>
+                          <div className="flex justify-between text-sm">
+                            <span>Montant collecté total</span>
+                            <span className="font-medium">{((formData.collectAmount || 0) + (formData.deliveryPrice || 0)).toLocaleString()} Ar</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-slate-600">
+                            <span>- Frais de livraison</span>
+                            <span>- {(formData.deliveryPrice || 0).toLocaleString()} Ar</span>
+                          </div>
+                          <div className="flex justify-between text-lg font-bold text-green-600 pt-2 border-t">
+                            <span>✅ À remettre au client:</span>
+                            <span>{(formData.collectAmount || 0).toLocaleString()} Ar</span>
+                          </div>
+                        </div>
+                      )}
+                      {formData.isPrepaid && (
+                        <div className="bg-amber-50 p-3 rounded">
+                          <p className="text-sm text-amber-700">ℹ️ Paiement prépayé : seuls les frais de livraison seront collectés</p>
+                          <p className="text-lg font-bold text-amber-900 mt-1">{(formData.deliveryPrice || 0).toLocaleString()} Ar à remettre au client</p>
+                        </div>
+                      )}
                     </>
                   )}
-                  {formData.isPrepaid && (
-                    <div className="flex justify-between items-center text-sm text-amber-600 bg-amber-50 p-3 rounded">
-                      <span>Seulement les frais de livraison seront collectés:</span>
-                      <span className="font-semibold">{(formData.deliveryPrice || 0).toLocaleString()} Ar</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center text-lg font-semibold">
-                    <span>Total à remettre au destinataire:</span>
-                    <span className="text-primary">{(totalDue || 0).toLocaleString()} Ar</span>
-                  </div>
                 </div>
               </div>
             </CardContent>

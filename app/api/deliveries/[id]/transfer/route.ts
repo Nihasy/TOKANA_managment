@@ -32,11 +32,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Livraison non trouvée" }, { status: 404 })
     }
 
-    // Check if delivery is in CREATED status (not picked up yet) - only for couriers
+    // Check if delivery can be transferred - only for couriers
     // Admins can reassign at any time
-    if (session.user.role === "COURIER" && delivery.status !== "CREATED") {
+    // Couriers can transfer CREATED or PICKED_UP deliveries
+    if (session.user.role === "COURIER" && !["CREATED", "PICKED_UP"].includes(delivery.status)) {
       return NextResponse.json(
-        { error: "Seules les livraisons non récupérées peuvent être transférées" },
+        { error: "Seules les livraisons non livrées peuvent être transférées" },
         { status: 400 }
       )
     }

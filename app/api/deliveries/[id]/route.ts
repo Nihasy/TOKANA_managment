@@ -77,17 +77,30 @@ export async function PATCH(
     }
 
     // Compute pricing
-    const pricing = computePrice({
+    const deliveryPrice = computePrice({
       zone: validatedData.zone,
-      parcelCount: validatedData.parcelCount,
       weightKg: validatedData.weightKg,
       isExpress: validatedData.isExpress,
     });
 
-    // Calculate totalDue based on isPrepaid
-    const totalDue = validatedData.isPrepaid
-      ? pricing.deliveryPrice
-      : (validatedData.collectAmount || 0);
+    // Calculate totalDue based on isPrepaid and deliveryFeePrepaid
+    const deliveryFeePrepaid = validatedData.deliveryFeePrepaid || false;
+    const isPrepaid = validatedData.isPrepaid || false;
+    
+    const totalDue = deliveryFeePrepaid 
+      ? (isPrepaid ? 0 : (validatedData.collectAmount || 0))  // Si frais prépayés, seul le montant du produit
+      : (isPrepaid 
+          ? deliveryPrice  // Si isPrepaid, seulement les frais
+          : deliveryPrice + (validatedData.collectAmount || 0));  // Sinon tout
+
+    console.log('🔄 Mise à jour de la livraison:', {
+      id,
+      deliveryPrice,
+      totalDue,
+      isPrepaid,
+      deliveryFeePrepaid,
+      collectAmount: validatedData.collectAmount,
+    });
 
     // Update delivery
     const delivery = await prisma.delivery.update({
@@ -104,9 +117,11 @@ export async function PATCH(
         isExpress: validatedData.isExpress,
         description: validatedData.description || null,
         note: validatedData.note || null,
-        collectAmount: validatedData.isPrepaid ? 0 : (validatedData.collectAmount || 0),
-        isPrepaid: validatedData.isPrepaid || false,
-        deliveryPrice: pricing.deliveryPrice,
+        collectAmount: isPrepaid ? 0 : (validatedData.collectAmount || 0),
+        isPrepaid,
+        deliveryFeePrepaid,
+        deliveryPrice,
+        autoPrice: deliveryPrice,
         totalDue,
         courierId: validatedData.courierId === "UNASSIGNED" ? null : validatedData.courierId,
       },

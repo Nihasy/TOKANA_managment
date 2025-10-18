@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
@@ -8,27 +8,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 
-export default function EditClientPage({ params }: { params: { id: string } }) {
+export default function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { toast } = useToast()
+  const { id } = use(params)
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     pickupAddress: "",
+    pickupZone: "TANA_VILLE" as "TANA_VILLE" | "PERIPHERIE" | "SUPER_PERIPHERIE",
     note: "",
   })
 
   const { data: client, isLoading } = useQuery({
-    queryKey: ["client", params.id],
+    queryKey: ["client", id],
     queryFn: async () => {
-      const res = await fetch(`/api/clients?search=${params.id}`)
+      const res = await fetch(`/api/clients/${id}`)
       if (!res.ok) throw new Error("Failed to fetch client")
-      const clients = await res.json()
-      return clients.find((c: any) => c.id === params.id)
+      return res.json()
     },
   })
 
@@ -38,6 +40,7 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
         name: client.name,
         phone: client.phone,
         pickupAddress: client.pickupAddress,
+        pickupZone: client.pickupZone || "TANA_VILLE",
         note: client.note || "",
       })
     }
@@ -45,7 +48,7 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/clients/${params.id}`, {
+      const res = await fetch(`/api/clients/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
@@ -122,6 +125,27 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
                 disabled={updateMutation.isPending}
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pickupZone">Zone de récupération *</Label>
+              <Select
+                value={formData.pickupZone}
+                onValueChange={(value) => setFormData({ ...formData, pickupZone: value as "TANA_VILLE" | "PERIPHERIE" | "SUPER_PERIPHERIE" })}
+                disabled={updateMutation.isPending}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionner une zone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TANA_VILLE">Tana-Ville</SelectItem>
+                  <SelectItem value="PERIPHERIE">Périphérie</SelectItem>
+                  <SelectItem value="SUPER_PERIPHERIE">Super-Périphérie</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-slate-500">
+                Cette catégorie permet de mieux organiser les récupérations selon la localisation
+              </p>
             </div>
 
             <div className="space-y-2">

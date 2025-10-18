@@ -839,7 +839,7 @@ export default function CourierTodayPage() {
                                     {delivery.courierRemarks ? "Modifier remarques" : "Ajouter remarques"}
                                   </DropdownMenuItem>
 
-                              {delivery.status === "CREATED" && (
+                              {["CREATED", "PICKED_UP"].includes(delivery.status) && (
                                     <DropdownMenuItem
                                   onClick={() => handleTransfer(delivery.id)}
                                   disabled={transferMutation.isPending || couriers.length === 0}

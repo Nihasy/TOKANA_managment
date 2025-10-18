@@ -21,6 +21,18 @@ enum DeliveryStatus {
   CANCELED
 }
 
+enum PickupZone {
+  TANA_VILLE
+  PERIPHERIE
+  SUPER_PERIPHERIE
+}
+
+enum SettlementType {
+  CASH_COURIER    // Cash livré par livreur
+  MOBILE_MONEY    // Mobile Money
+  OFFICE_PICKUP   // Récupéré au siège par le client
+}
+
 model User {
   id         String     @id @default(cuid())
   email      String     @unique
@@ -38,6 +50,7 @@ model Client {
   name          String
   phone         String
   pickupAddress String
+  pickupZone    PickupZone @default(TANA_VILLE)
   note          String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -66,9 +79,18 @@ model Delivery {
 
   // Payment tracking
   isPrepaid Boolean @default(false) // Si le client et destinataire ont déjà réglé entre eux
+  deliveryFeePrepaid Boolean @default(false) // Si les frais de livraison ont été payés d'avance par le client
+  
+  // Règlement livreur (réception de l'argent du livreur)
+  courierSettled Boolean @default(false) // Si l'argent a été reçu du livreur
+  courierSettledAt DateTime? // Date de réception de l'argent du livreur
+  courierSettledBy String? // Admin qui a confirmé la réception
+  
+  // Règlement client (versement au client J+1)
   isSettled Boolean @default(false) // Si le règlement au client a été effectué
   settledAt DateTime?
   settledBy String? // Admin qui a effectué le règlement
+  settlementType SettlementType? // Type de remise (Cash/Mobile Money/Siège)
 
   status      DeliveryStatus @default(CREATED)
   postponedTo DateTime?

@@ -4,6 +4,37 @@ import { requireAdmin } from "@/lib/auth-utils"
 import { courierUpdateSchema } from "@/lib/validations/courier"
 import bcrypt from "bcryptjs"
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAdmin()
+
+    const { id } = await params
+
+    const courier = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+      },
+    })
+
+    if (!courier) {
+      return NextResponse.json({ error: "Courier not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(courier)
+  } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()

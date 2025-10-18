@@ -7,16 +7,17 @@ export async function GET(request: Request) {
     await requireAdmin()
 
     const { searchParams } = new URL(request.url)
-    const date = searchParams.get("date")
+    const startDateStr = searchParams.get("startDate")
+    const endDateStr = searchParams.get("endDate")
     const courierId = searchParams.get("courierId")
 
-    if (!date || !courierId) {
-      return NextResponse.json({ error: "Date and courierId are required" }, { status: 400 })
+    if (!startDateStr || !endDateStr || !courierId) {
+      return NextResponse.json({ error: "startDate, endDate and courierId are required" }, { status: 400 })
     }
 
-    const startDate = new Date(date)
+    const startDate = new Date(startDateStr)
     startDate.setHours(0, 0, 0, 0)
-    const endDate = new Date(date)
+    const endDate = new Date(endDateStr)
     endDate.setHours(23, 59, 59, 999)
 
     // Get all PAID deliveries for the courier on the specified date
@@ -42,6 +43,9 @@ export async function GET(request: Request) {
       },
       orderBy: { updatedAt: "desc" },
     })
+    
+    // Check if all deliveries are settled with courier
+    const allCourierSettled = deliveries.every(d => d.courierSettled)
 
     // Calculate totals
     const nbLivraisons = deliveries.length
@@ -57,6 +61,7 @@ export async function GET(request: Request) {
         totalDeliveryFees,
         totalARemettre,
       },
+      allCourierSettled,
     })
   } catch (error) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

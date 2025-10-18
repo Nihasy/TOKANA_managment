@@ -9,15 +9,22 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const filter = searchParams.get("filter") || "pending" // pending, settled, all
+    const maxDateStr = searchParams.get("maxDate")
 
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    yesterday.setHours(0, 0, 0, 0)
+    // Date maximale pour les livraisons (par défaut hier)
+    let maxDate = new Date()
+    maxDate.setDate(maxDate.getDate() - 1)
+    maxDate.setHours(23, 59, 59, 999)
+
+    if (maxDateStr) {
+      maxDate = new Date(maxDateStr)
+      maxDate.setHours(23, 59, 59, 999)
+    }
 
     const where: any = {
       status: "PAID", // Seulement les livraisons payées
       plannedDate: {
-        lte: yesterday, // Livraisons d'hier ou avant (J+1)
+        lte: maxDate, // Livraisons jusqu'à la date spécifiée (J+1)
       },
     }
 
@@ -58,11 +65,33 @@ export async function GET(request: Request) {
       acc[delivery.senderId].deliveries.push(delivery)
       
       // Calculer le montant à remettre
-      // Si isPrepaid = false : on doit remettre (collectAmount - deliveryPrice)
-      // Si isPrepaid = true : on ne doit rien remettre (collectAmount = 0, seulement deliveryPrice collecté)
-      if (!delivery.isPrepaid && delivery.collectAmount) {
-        acc[delivery.senderId].totalToSettle += (delivery.collectAmount - delivery.deliveryPrice)
+      // Logique de règlement :
+      // 1. isPrepaid = false, deliveryFeePrepaid = false : remettre (collectAmount - deliveryPrice)
+      // 2. isPrepaid = false, deliveryFeePrepaid = true : remettre tout collectAmount (frais déjà payés)
+      // 3. isPrepaid = true, deliveryFeePrepaid = false : déduire deliveryPrice (client doit payer frais)
+      // 4. isPrepaid = true, deliveryFeePrepaid = true : rien à faire (tout payé)
+      
+      let amountToSettle = 0
+      
+      if (!delivery.isPrepaid) {
+        // Le livreur a collecté de l'argent
+        if (delivery.deliveryFeePrepaid) {
+          // Les frais ont déjà été payés, on rend tout au client
+          amountToSettle = delivery.collectAmount || 0
+        } else {
+          // On déduit les frais de livraison
+          amountToSettle = (delivery.collectAmount || 0) - delivery.deliveryPrice
+        }
+      } else {
+        // isPrepaid = true (livraison prépayée)
+        if (!delivery.deliveryFeePrepaid) {
+          // Le client n'a pas payé les frais, on les déduit (montant négatif = débit)
+          amountToSettle = -delivery.deliveryPrice
+        }
+        // Si deliveryFeePrepaid = true, rien à régler (tout est payé)
       }
+      
+      acc[delivery.senderId].totalToSettle += amountToSettle
       acc[delivery.senderId].totalDeliveryFees += delivery.deliveryPrice
       
       return acc
