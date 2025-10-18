@@ -69,7 +69,7 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
     <div className="p-8">
       <div className="mb-8">
         <Link href="/admin/clients">
-          <Button variant="ghost" size="sm" className="mb-4">
+          <Button variant="ghost" size="sm" className="mb-4 cursor-pointer">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Retour
           </Button>
@@ -136,11 +136,18 @@ export default function EditClientPage({ params }: { params: { id: string } }) {
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Mise à jour..." : "Mettre à jour"}
+              <Button type="submit" disabled={updateMutation.isPending} className="cursor-pointer disabled:cursor-not-allowed">
+                {updateMutation.isPending ? (
+                  <>
+                    <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Mise à jour...
+                  </>
+                ) : (
+                  "Mettre à jour"
+                )}
               </Button>
               <Link href="/admin/clients">
-                <Button type="button" variant="outline" disabled={updateMutation.isPending}>
+                <Button type="button" variant="outline" disabled={updateMutation.isPending} className="cursor-pointer disabled:cursor-not-allowed">
                   Annuler
                 </Button>
               </Link>

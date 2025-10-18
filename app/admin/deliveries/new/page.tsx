@@ -41,6 +41,7 @@ export default function NewDeliveryPage() {
     isExpress: false,
     deliveryPrice: 0,
     collectAmount: 0,
+    isPrepaid: false,
     courierId: "UNASSIGNED",
   })
 
@@ -111,7 +112,7 @@ export default function NewDeliveryPage() {
     <div className="p-8">
       <div className="mb-8">
         <Link href="/admin/deliveries">
-          <Button variant="ghost" size="sm" className="mb-4">
+          <Button variant="ghost" size="sm" className="mb-4 cursor-pointer">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Retour
           </Button>
@@ -341,14 +342,61 @@ export default function NewDeliveryPage() {
                   min="0"
                   value={formData.collectAmount}
                   onChange={(e) => setFormData({ ...formData, collectAmount: Number.parseInt(e.target.value) || 0 })}
-                  disabled={isLoading}
+                  disabled={isLoading || formData.isPrepaid}
                 />
+                <p className="text-sm text-slate-500">
+                  Prix du produit que le destinataire doit remettre au livreur
+                </p>
               </div>
 
+              <div className="flex items-center space-x-2 pt-2">
+                <Checkbox
+                  id="isPrepaid"
+                  checked={formData.isPrepaid}
+                  onCheckedChange={(checked) => 
+                    setFormData({ ...formData, isPrepaid: checked === true, collectAmount: checked ? 0 : formData.collectAmount })
+                  }
+                  disabled={isLoading}
+                />
+                <Label 
+                  htmlFor="isPrepaid" 
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  Paiement déjà effectué entre client et destinataire
+                </Label>
+              </div>
+              <p className="text-xs text-slate-500 ml-6">
+                Si coché, seuls les frais de livraison seront collectés
+              </p>
+
               <div className="pt-4 border-t">
-                <div className="flex justify-between items-center text-lg font-semibold">
-                  <span>Total à remettre:</span>
-                  <span className="text-primary">{totalDue.toLocaleString()} Ar</span>
+                <div className="space-y-2">
+                  {!formData.isPrepaid && formData.collectAmount > 0 && (
+                    <>
+                      <div className="flex justify-between items-center text-sm text-slate-600">
+                        <span>Montant collecté:</span>
+                        <span>{((formData.collectAmount || 0) + (formData.deliveryPrice || 0)).toLocaleString()} Ar</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm text-slate-600">
+                        <span>Frais de livraison à retenir:</span>
+                        <span>- {(formData.deliveryPrice || 0).toLocaleString()} Ar</span>
+                      </div>
+                      <div className="flex justify-between items-center text-lg font-semibold text-green-600 pt-2 border-t">
+                        <span>À remettre au client:</span>
+                        <span>{(formData.collectAmount || 0).toLocaleString()} Ar</span>
+                      </div>
+                    </>
+                  )}
+                  {formData.isPrepaid && (
+                    <div className="flex justify-between items-center text-sm text-amber-600 bg-amber-50 p-3 rounded">
+                      <span>Seulement les frais de livraison seront collectés:</span>
+                      <span className="font-semibold">{(formData.deliveryPrice || 0).toLocaleString()} Ar</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center text-lg font-semibold">
+                    <span>Total à remettre au destinataire:</span>
+                    <span className="text-primary">{(totalDue || 0).toLocaleString()} Ar</span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -356,11 +404,18 @@ export default function NewDeliveryPage() {
         </div>
 
         <div className="flex gap-4 mt-6">
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Création..." : "Créer la livraison"}
+          <Button type="submit" disabled={isLoading} className="cursor-pointer disabled:cursor-not-allowed">
+            {isLoading ? (
+              <>
+                <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Création...
+              </>
+            ) : (
+              "Créer la livraison"
+            )}
           </Button>
           <Link href="/admin/deliveries">
-            <Button type="button" variant="outline" disabled={isLoading}>
+            <Button type="button" variant="outline" disabled={isLoading} className="cursor-pointer disabled:cursor-not-allowed">
               Annuler
             </Button>
           </Link>

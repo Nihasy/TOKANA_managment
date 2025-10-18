@@ -17,6 +17,10 @@ interface Delivery {
   deliveryPrice: number
   collectAmount: number
   totalDue: number
+  courierRemarks?: string
+  courier?: {
+    name: string
+  }
   sender: {
     name: string
   }
@@ -218,6 +222,7 @@ export default function SettlementReportPage() {
                     <TableHead>Expéditeur</TableHead>
                     <TableHead>Récepteur</TableHead>
                     <TableHead>Adresse</TableHead>
+                    <TableHead>Remarques livreur</TableHead>
                     <TableHead className="text-right">Frais livraison</TableHead>
                     <TableHead className="text-right">Montant collecté</TableHead>
                     <TableHead className="text-right">Total</TableHead>
@@ -229,13 +234,27 @@ export default function SettlementReportPage() {
                       <TableCell className="font-medium">{delivery.sender.name}</TableCell>
                       <TableCell>{delivery.receiverName}</TableCell>
                       <TableCell className="text-slate-600">{delivery.receiverAddress}</TableCell>
+                      <TableCell>
+                        {delivery.courierRemarks ? (
+                          <div className="max-w-xs">
+                            <div className="text-xs text-slate-500 mb-1">
+                              {delivery.courier?.name ? `Livreur ${delivery.courier.name}:` : "Remarques:"}
+                            </div>
+                            <div className="text-sm text-slate-700 bg-blue-50 p-2 rounded border-l-2 border-blue-200">
+                              {delivery.courierRemarks}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-sm">-</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">{delivery.deliveryPrice.toLocaleString()} Ar</TableCell>
                       <TableCell className="text-right">{(delivery.collectAmount || 0).toLocaleString()} Ar</TableCell>
                       <TableCell className="text-right font-medium">{delivery.totalDue.toLocaleString()} Ar</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="bg-slate-50 font-semibold">
-                    <TableCell colSpan={3}>TOTAL</TableCell>
+                    <TableCell colSpan={4}>TOTAL</TableCell>
                     <TableCell className="text-right">
                       {settlementData.summary.totalDeliveryFees.toLocaleString()} Ar
                     </TableCell>

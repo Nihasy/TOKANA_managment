@@ -55,7 +55,7 @@ export default function NewCourierPage() {
     <div className="p-8">
       <div className="mb-8">
         <Link href="/admin/couriers">
-          <Button variant="ghost" size="sm" className="mb-4">
+          <Button variant="ghost" size="sm" className="mb-4 cursor-pointer">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Retour
           </Button>
@@ -118,11 +118,18 @@ export default function NewCourierPage() {
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Création..." : "Créer le livreur"}
+              <Button type="submit" disabled={isLoading} className="cursor-pointer disabled:cursor-not-allowed">
+                {isLoading ? (
+                  <>
+                    <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Création...
+                  </>
+                ) : (
+                  "Créer le livreur"
+                )}
               </Button>
               <Link href="/admin/couriers">
-                <Button type="button" variant="outline" disabled={isLoading}>
+                <Button type="button" variant="outline" disabled={isLoading} className="cursor-pointer disabled:cursor-not-allowed">
                   Annuler
                 </Button>
               </Link>

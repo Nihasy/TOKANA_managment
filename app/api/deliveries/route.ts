@@ -100,6 +100,7 @@ export async function POST(request: Request) {
         autoPrice,
         deliveryPrice: validatedData.deliveryPrice,
         collectAmount: validatedData.collectAmount,
+        isPrepaid: validatedData.isPrepaid || false,
         totalDue,
         courierId: validatedData.courierId,
         status: "CREATED",

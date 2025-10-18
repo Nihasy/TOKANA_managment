@@ -57,11 +57,18 @@ model Delivery {
   weightKg      Float   @default(1)
   description   String?
   note          String?
+  courierRemarks String?
 
   collectAmount Int?
   deliveryPrice Int
   autoPrice     Int
   totalDue      Int
+
+  // Payment tracking
+  isPrepaid Boolean @default(false) // Si le client et destinataire ont déjà réglé entre eux
+  isSettled Boolean @default(false) // Si le règlement au client a été effectué
+  settledAt DateTime?
+  settledBy String? // Admin qui a effectué le règlement
 
   status      DeliveryStatus @default(CREATED)
   postponedTo DateTime?

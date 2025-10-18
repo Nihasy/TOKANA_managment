@@ -3,25 +3,16 @@ import { prisma } from "@/lib/prisma"
 import { requireAuth } from "@/lib/auth-utils"
 import { z } from "zod"
 
-const statusSchema = z.object({
-  status: z.enum(["CREATED", "PICKED_UP", "DELIVERED", "PAID", "CANCELED"]),
+const remarksSchema = z.object({
+  courierRemarks: z.string().min(1, "Les remarques ne peuvent pas être vides").max(1000, "Les remarques ne peuvent pas dépasser 1000 caractères"),
 })
-
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  CREATED: ["PICKED_UP", "CANCELED"],
-  PICKED_UP: ["DELIVERED", "CANCELED"],
-  DELIVERED: ["PAID"],
-  PAID: [],
-  POSTPONED: ["PICKED_UP", "CANCELED"],
-  CANCELED: [],
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth()
     const { id } = await params
     const body = await request.json()
-    const { status } = statusSchema.parse(body)
+    const { courierRemarks } = remarksSchema.parse(body)
 
     // Get current delivery
     const delivery = await prisma.delivery.findUnique({
@@ -32,23 +23,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Livraison non trouvée" }, { status: 404 })
     }
 
-    // Check ownership for couriers
+    // Check if the current user is the assigned courier
     if (session.user.role === "COURIER" && delivery.courierId !== session.user.id) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 403 })
     }
 
-    // Validate transition
-    const allowedTransitions = VALID_TRANSITIONS[delivery.status]
-    if (!allowedTransitions.includes(status)) {
-      return NextResponse.json({ error: `Transition invalide de ${delivery.status} vers ${status}` }, { status: 400 })
-    }
-
-    // Update status
+    // Update the delivery with courier remarks
     const updatedDelivery = await prisma.delivery.update({
       where: { id },
-      data: { status },
+      data: { courierRemarks },
       include: {
-        sender: true,
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            pickupAddress: true,
+          },
+        },
         courier: {
           select: {
             id: true,
@@ -65,6 +57,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    )
   }
 }

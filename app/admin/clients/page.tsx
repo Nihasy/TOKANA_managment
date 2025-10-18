@@ -34,29 +34,40 @@ export default function ClientsPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
-  const { data: clients = [], isLoading } = useQuery({
+  const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ["clients", search],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (search) params.set("search", search)
       const res = await fetch(`/api/clients?${params}`)
-      if (!res.ok) throw new Error("Failed to fetch clients")
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Erreur lors du chargement des clients")
+      }
       return res.json() as Promise<Client[]>
     },
+    retry: 2,
   })
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/clients/${id}`, { method: "DELETE" })
-      if (!res.ok) throw new Error("Failed to delete client")
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Erreur lors de la suppression")
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] })
       toast({ title: "Client supprimé avec succès" })
       setDeleteId(null)
     },
-    onError: () => {
-      toast({ title: "Erreur lors de la suppression", variant: "destructive" })
+    onError: (error: Error) => {
+      toast({ 
+        title: "Erreur lors de la suppression", 
+        description: error.message,
+        variant: "destructive" 
+      })
     },
   })
 
@@ -68,7 +79,7 @@ export default function ClientsPage() {
           <p className="text-slate-600 mt-1">Gérez vos clients expéditeurs</p>
         </div>
         <Link href="/admin/clients/new">
-          <Button>
+          <Button className="cursor-pointer">
             <Plus className="h-4 w-4 mr-2" />
             Nouveau client
           </Button>
@@ -91,7 +102,10 @@ export default function ClientsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-8 text-slate-500">Chargement...</div>
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="h-12 w-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
+              <p className="text-slate-500">Chargement des clients...</p>
+            </div>
           ) : clients.length === 0 ? (
             <div className="text-center py-8 text-slate-500">Aucun client trouvé</div>
           ) : (
@@ -115,11 +129,11 @@ export default function ClientsPage() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Link href={`/admin/clients/${client.id}/edit`}>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" className="cursor-pointer">
                             <Pencil className="h-4 w-4" />
                           </Button>
                         </Link>
-                        <Button variant="ghost" size="sm" onClick={() => setDeleteId(client.id)}>
+                        <Button variant="ghost" size="sm" onClick={() => setDeleteId(client.id)} className="cursor-pointer">
                           <Trash2 className="h-4 w-4 text-red-600" />
                         </Button>
                       </div>
@@ -141,8 +155,21 @@ export default function ClientsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)}>Supprimer</AlertDialogAction>
+            <AlertDialogCancel className="cursor-pointer">Annuler</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              disabled={deleteMutation.isPending}
+              className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                  Suppression...
+                </>
+              ) : (
+                "Supprimer"
+              )}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

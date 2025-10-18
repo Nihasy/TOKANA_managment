@@ -11,14 +11,15 @@ import { SelectTrigger } from "@/components/ui/select"
 import { Select } from "@/components/ui/select"
 
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Calendar } from "lucide-react"
+import { Plus, Calendar, Pencil } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface Delivery {
   id: string
@@ -31,12 +32,22 @@ interface Delivery {
   isExpress: boolean
   deliveryPrice: number
   totalDue: number
+  note?: string
+  courierRemarks?: string
   sender: {
     name: string
   }
   courier?: {
+    id: string
     name: string
+    email: string
   }
+}
+
+interface Courier {
+  id: string
+  name: string
+  email: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -58,18 +69,65 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function DeliveriesPage() {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [date, setDate] = useState("")
   const [status, setStatus] = useState("ALL")
 
-  const { data: deliveries = [], isLoading } = useQuery({
+  const { data: deliveries = [], isLoading } = useQuery<Delivery[]>({
     queryKey: ["deliveries", date, status],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (date) params.set("date", date)
       if (status !== "ALL") params.set("status", status)
       const res = await fetch(`/api/deliveries?${params}`)
-      if (!res.ok) throw new Error("Failed to fetch deliveries")
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Erreur lors du chargement des livraisons")
+      }
       return res.json() as Promise<Delivery[]>
+    },
+    retry: 2,
+  })
+
+  // Fetch couriers
+  const { data: couriers = [] } = useQuery<Courier[]>({
+    queryKey: ["couriers"],
+    queryFn: async () => {
+      const res = await fetch("/api/couriers")
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Erreur lors du chargement des livreurs")
+      }
+      return res.json()
+    },
+    retry: 2,
+  })
+
+  // Mutation to reassign courier
+  const reassignCourierMutation = useMutation({
+    mutationFn: async ({ deliveryId, courierId }: { deliveryId: string; courierId: string | null }) => {
+      const res = await fetch(`/api/deliveries/${deliveryId}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newCourierId: courierId }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Erreur lors de la réassignation")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+      toast({ title: "Livreur réassigné avec succès" })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erreur",
+        description: error.message,
+        variant: "destructive",
+      })
     },
   })
 
@@ -81,7 +139,7 @@ export default function DeliveriesPage() {
           <p className="text-slate-600 mt-1">Gérez toutes les livraisons</p>
         </div>
         <Link href="/admin/deliveries/new">
-          <Button>
+          <Button className="cursor-pointer">
             <Plus className="h-4 w-4 mr-2" />
             Nouvelle livraison
           </Button>
@@ -116,6 +174,7 @@ export default function DeliveriesPage() {
                   setDate("")
                   setStatus("ALL")
                 }}
+                className="cursor-pointer"
               >
                 Réinitialiser
               </Button>
@@ -124,7 +183,10 @@ export default function DeliveriesPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-8 text-slate-500">Chargement...</div>
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="h-12 w-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
+              <p className="text-slate-500">Chargement des livraisons...</p>
+            </div>
           ) : deliveries.length === 0 ? (
             <div className="text-center py-8 text-slate-500">Aucune livraison trouvée</div>
           ) : (
@@ -137,7 +199,9 @@ export default function DeliveriesPage() {
                   <TableHead>Zone</TableHead>
                   <TableHead>Livreur</TableHead>
                   <TableHead>Statut</TableHead>
+                  <TableHead>Remarques</TableHead>
                   <TableHead className="text-right">Prix</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -157,11 +221,57 @@ export default function DeliveriesPage() {
                         {delivery.isExpress && <Badge variant="secondary">Express</Badge>}
                       </div>
                     </TableCell>
-                    <TableCell>{delivery.courier?.name || "-"}</TableCell>
+                    <TableCell>
+                      <Select
+                        value={delivery.courier?.id || "UNASSIGNED"}
+                        onValueChange={(value) => {
+                          reassignCourierMutation.mutate({
+                            deliveryId: delivery.id,
+                            courierId: value === "UNASSIGNED" ? null : value,
+                          })
+                        }}
+                        disabled={reassignCourierMutation.isPending}
+                      >
+                        <SelectTrigger className="w-[180px] cursor-pointer">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="UNASSIGNED" className="cursor-pointer">
+                            <span className="text-slate-500 italic">Non assigné</span>
+                          </SelectItem>
+                          {couriers.map((courier) => (
+                            <SelectItem key={courier.id} value={courier.id} className="cursor-pointer">
+                              {courier.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell>
                       <Badge className={STATUS_COLORS[delivery.status]}>{STATUS_LABELS[delivery.status]}</Badge>
                     </TableCell>
+                    <TableCell>
+                      {delivery.courierRemarks ? (
+                        <div className="max-w-xs">
+                          <div className="text-xs text-slate-500 mb-1">
+                            {delivery.courier?.name ? `Livreur ${delivery.courier.name}:` : "Remarques:"}
+                          </div>
+                          <div className="text-sm text-slate-700 bg-blue-50 p-2 rounded border-l-2 border-blue-200">
+                            {delivery.courierRemarks}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-sm">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right font-medium">{delivery.totalDue.toLocaleString()} Ar</TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/admin/deliveries/${delivery.id}/edit`}>
+                        <Button variant="ghost" size="sm" className="cursor-pointer">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

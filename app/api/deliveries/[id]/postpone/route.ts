@@ -17,15 +17,16 @@ const postponeSchema = z.object({
   ),
 })
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth()
+    const { id } = await params
     const body = await request.json()
     const { postponedTo } = postponeSchema.parse(body)
 
     // Get current delivery
     const delivery = await prisma.delivery.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!delivery) {
@@ -44,7 +45,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     // Update delivery
     const updatedDelivery = await prisma.delivery.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status: "POSTPONED",
         postponedTo: new Date(postponedTo),

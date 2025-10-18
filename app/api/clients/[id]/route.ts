@@ -3,15 +3,16 @@ import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/auth-utils"
 import { clientSchema } from "@/lib/validations/client"
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = clientSchema.parse(body)
 
     const client = await prisma.client.update({
-      where: { id: params.id },
+      where: { id },
       data: validatedData,
     })
 
@@ -24,12 +25,26 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
 
+    const { id } = await params
+
+    // Check if client has deliveries
+    const deliveryCount = await prisma.delivery.count({
+      where: { senderId: id },
+    })
+
+    if (deliveryCount > 0) {
+      return NextResponse.json(
+        { error: "Impossible de supprimer un client avec des livraisons associées" },
+        { status: 400 }
+      )
+    }
+
     await prisma.client.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ success: true })
