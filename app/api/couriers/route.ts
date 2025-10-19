@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireAuth } from "@/lib/auth-utils";
 import { courierSchema } from "@/lib/validations/courier";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 export async function GET(request: Request) {
   try {

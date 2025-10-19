@@ -8,8 +8,9 @@ import { useSession } from "next-auth/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, MapPin, Package, ChevronDown, UserRoundPlus, MessageSquare, MoreVertical, Check, Calendar, ArrowRightLeft } from "lucide-react";
+import { Phone, MapPin, Package, ChevronDown, UserRoundPlus, MessageSquare, MoreVertical, Check, Calendar, ArrowRightLeft, CalendarDays } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +26,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -121,14 +121,15 @@ export default function CourierTodayPage() {
   const [remarksText, setRemarksText] = useState("");
 
   // Date du jour (YYYY-MM-DD)
-  const today = new Date().toISOString().split("T")[0];
+  const todayDate = new Date().toISOString().split("T")[0];
+  const [selectedDate, setSelectedDate] = useState(todayDate);
 
-  // --- Query : livraisons assignées au livreur pour aujourd'hui
+  // --- Query : livraisons assignées au livreur pour la date sélectionnée
   const { data: deliveries = [], isLoading, error } = useQuery<Delivery[]>({
-    queryKey: ["courier-deliveries", today],
+    queryKey: ["courier-deliveries", selectedDate],
     queryFn: async () => {
       const res = await fetch(
-        `/api/deliveries?date=${today}&assignedToMe=true`
+        `/api/deliveries?date=${selectedDate}&assignedToMe=true`
       );
       if (!res.ok) {
         const errorData = await res.json();
@@ -386,17 +387,90 @@ export default function CourierTodayPage() {
     }
   };
 
+  // Fonctions helper pour les dates rapides
+  const getTodayDate = () => {
+    return new Date().toISOString().split("T")[0];
+  };
+
+  const getTomorrowDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  };
+
+  const getDateLabel = (date: string) => {
+    const selected = new Date(date + 'T00:00:00');
+    
+    if (date === todayDate) {
+      return "Aujourd'hui";
+    } else if (date === getTomorrowDate()) {
+      return "Demain";
+    } else {
+      return selected.toLocaleDateString("fr-FR", { 
+        weekday: 'long',
+        day: 'numeric', 
+        month: 'long',
+        year: 'numeric' 
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 shadow-lg">
             <h1 className="text-2xl font-bold text-white">
-              Mes livraisons du jour
+              Mes livraisons
             </h1>
             <p className="text-blue-100 mt-1">
-              {new Date().toLocaleDateString("fr-FR", { dateStyle: "full" })}
+              {getDateLabel(selectedDate)}
             </p>
+            
+            {/* Filtre de dates */}
+            <div className="mt-4 space-y-3">
+              {/* Boutons rapides */}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant={selectedDate === todayDate ? "secondary" : "outline"}
+                  onClick={() => setSelectedDate(todayDate)}
+                  className={`${
+                    selectedDate === todayDate
+                      ? "bg-white text-blue-700 hover:bg-blue-50 font-semibold"
+                      : "bg-blue-500/20 text-white border-white/30 hover:bg-white/30 hover:text-white"
+                  } cursor-pointer`}
+                >
+                  <CalendarDays className="h-4 w-4 mr-1.5" />
+                  Aujourd'hui
+                </Button>
+                <Button
+                  size="sm"
+                  variant={selectedDate === getTomorrowDate() ? "secondary" : "outline"}
+                  onClick={() => setSelectedDate(getTomorrowDate())}
+                  className={`${
+                    selectedDate === getTomorrowDate()
+                      ? "bg-white text-blue-700 hover:bg-blue-50 font-semibold"
+                      : "bg-blue-500/20 text-white border-white/30 hover:bg-white/30 hover:text-white"
+                  } cursor-pointer`}
+                >
+                  <Calendar className="h-4 w-4 mr-1.5" />
+                  Demain
+                </Button>
+              </div>
+
+              {/* Sélecteur de date personnalisé */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-white/95 backdrop-blur-sm border-white/50 text-slate-800 font-medium cursor-pointer focus:ring-2 focus:ring-white/50"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           <Card>
             <CardContent className="py-12">
@@ -442,11 +516,56 @@ export default function CourierTodayPage() {
       <div className="max-w-4xl mx-auto">
       <div className="mb-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 shadow-lg">
         <h1 className="text-2xl font-bold text-white">
-          Mes livraisons du jour
+          Mes livraisons
         </h1>
         <p className="text-blue-100 mt-1">
-          {new Date().toLocaleDateString("fr-FR", { dateStyle: "full" })}
+          {getDateLabel(selectedDate)}
         </p>
+        
+        {/* Filtre de dates */}
+        <div className="mt-4 space-y-3">
+          {/* Boutons rapides */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={selectedDate === todayDate ? "secondary" : "outline"}
+              onClick={() => setSelectedDate(todayDate)}
+              className={`${
+                selectedDate === todayDate
+                  ? "bg-white text-blue-700 hover:bg-blue-50 font-semibold"
+                  : "bg-blue-500/20 text-white border-white/30 hover:bg-white/30 hover:text-white"
+              } cursor-pointer`}
+            >
+              <CalendarDays className="h-4 w-4 mr-1.5" />
+              Aujourd'hui
+            </Button>
+            <Button
+              size="sm"
+              variant={selectedDate === getTomorrowDate() ? "secondary" : "outline"}
+              onClick={() => setSelectedDate(getTomorrowDate())}
+              className={`${
+                selectedDate === getTomorrowDate()
+                  ? "bg-white text-blue-700 hover:bg-blue-50 font-semibold"
+                  : "bg-blue-500/20 text-white border-white/30 hover:bg-white/30 hover:text-white"
+              } cursor-pointer`}
+            >
+              <Calendar className="h-4 w-4 mr-1.5" />
+              Demain
+            </Button>
+          </div>
+
+          {/* Sélecteur de date personnalisé */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 relative">
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-white/95 backdrop-blur-sm border-white/50 text-slate-800 font-medium cursor-pointer focus:ring-2 focus:ring-white/50"
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {activeDeliveries.length === 0 && completedDeliveries.length === 0 ? (
@@ -455,7 +574,9 @@ export default function CourierTodayPage() {
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
               <Package className="h-10 w-10 text-blue-400" />
             </div>
-            <p className="text-slate-600 font-medium">Aucune livraison assignée pour aujourd'hui</p>
+            <p className="text-slate-600 font-medium">
+              Aucune livraison assignée pour {selectedDate === todayDate ? "aujourd'hui" : "cette date"}
+            </p>
           </CardContent>
         </Card>
       ) : (
