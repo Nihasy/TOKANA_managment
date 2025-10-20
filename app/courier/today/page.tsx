@@ -420,12 +420,16 @@ export default function CourierTodayPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 shadow-lg">
-            <h1 className="text-2xl font-bold text-white">
-              Mes livraisons
-            </h1>
-            <p className="text-blue-100 mt-1">
-              {getDateLabel(selectedDate)}
-            </p>
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h1 className="text-2xl font-bold text-white">
+                  Mes livraisons
+                </h1>
+                <p className="text-blue-100 mt-1">
+                  {getDateLabel(selectedDate)}
+                </p>
+              </div>
+            </div>
             
             {/* Filtre de dates */}
             <div className="mt-4 space-y-3">
@@ -495,6 +499,11 @@ export default function CourierTodayPage() {
     ["PAID", "CANCELED", "POSTPONED"].includes(d.status)
   );
 
+  // Calcul du total des montants reçus (livraisons DELIVERED + PAID)
+  const totalCollected = deliveries
+    .filter((d) => ["DELIVERED", "PAID"].includes(d.status))
+    .reduce((sum, d) => sum + d.totalDue, 0);
+
   // Regrouper les livraisons par expéditeur pour les livraisons à récupérer (CREATED)
   const toPickupDeliveries = activeDeliveries.filter(d => d.status === "CREATED");
   const otherActiveDeliveries = activeDeliveries.filter(d => d.status !== "CREATED");
@@ -515,12 +524,31 @@ export default function CourierTodayPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 p-6">
       <div className="max-w-4xl mx-auto">
       <div className="mb-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 shadow-lg">
-        <h1 className="text-2xl font-bold text-white">
-          Mes livraisons
-        </h1>
-        <p className="text-blue-100 mt-1">
-          {getDateLabel(selectedDate)}
-        </p>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              Mes livraisons
+            </h1>
+            <p className="text-blue-100 mt-1">
+              {getDateLabel(selectedDate)}
+            </p>
+          </div>
+          
+          {/* Total des montants reçus */}
+          {totalCollected > 0 && (
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-3 text-right">
+              <div className="text-xs font-medium text-blue-100 uppercase tracking-wide mb-1">
+                Total reçu
+              </div>
+              <div className="text-2xl font-bold text-white">
+                {totalCollected.toLocaleString()} Ar
+              </div>
+              <div className="text-xs text-blue-200 mt-1">
+                {deliveries.filter((d) => ["DELIVERED", "PAID"].includes(d.status)).length} livraison(s)
+              </div>
+            </div>
+          )}
+        </div>
         
         {/* Filtre de dates */}
         <div className="mt-4 space-y-3">
@@ -1081,25 +1109,194 @@ export default function CourierTodayPage() {
                 Terminées ({completedDeliveries.length})
               </h2>
               </div>
-              {completedDeliveries.map((delivery) => (
-                <Card key={delivery.id} className="opacity-75 border-l-4 border-l-slate-400 shadow-sm hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-slate-900">
-                          {delivery.receiverName}
+
+              <Accordion.Root type="single" collapsible className="space-y-2">
+                {completedDeliveries.map((delivery) => {
+                  const itemValue = `completed-${delivery.id}`;
+
+                  // Couleur de bordure selon le statut
+                  const borderColor = delivery.status === "PAID" 
+                    ? "border-l-emerald-500" 
+                    : delivery.status === "POSTPONED"
+                    ? "border-l-orange-500"
+                    : "border-l-slate-400";
+
+                  return (
+                    <Accordion.Item
+                      key={delivery.id}
+                      value={itemValue}
+                      className={`rounded-xl border-l-4 ${borderColor} bg-white shadow-md hover:shadow-lg transition-shadow opacity-90`}
+                    >
+                      {/* EN-TÊTE COMPACT */}
+                      <Accordion.Header asChild>
+                        <div className="px-4 py-3 cursor-pointer select-none">
+                          {/* Ligne 1 : Statuts / tags à gauche — Montant + chevron à droite */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <Badge
+                                  className={STATUS_COLORS[delivery.status]}
+                                >
+                                  {STATUS_LABELS[delivery.status]}
+                                </Badge>
+                                {delivery.isExpress && (
+                                  <Badge className="bg-gradient-to-r from-orange-500 to-red-500 text-white border-0 shadow-sm">⚡ Express</Badge>
+                                )}
+                                {!!delivery.zone && (
+                                  <Badge className="bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 border border-purple-300">
+                                    📍 {delivery.zone}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="text-right bg-gradient-to-br from-slate-50 to-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+                                <div className="text-[11px] leading-none text-slate-600 font-medium">
+                                  Montant
+                                </div>
+                                <div className="text-base font-bold text-slate-700">
+                                  {delivery.totalDue.toLocaleString()} Ar
+                                </div>
+                              </div>
+
+                              <Accordion.Trigger asChild>
+                                <button
+                                  aria-label="Afficher les détails"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 hover:from-slate-100 hover:to-slate-200 transition
+                       data-[state=open]:rotate-180 data-[state=open]:bg-slate-100"
+                                >
+                                  <ChevronDown className="h-4 w-4 text-slate-600 transition-transform" />
+                                </button>
+                              </Accordion.Trigger>
+                            </div>
+                          </div>
+
+                          {/* Ligne 2 : Récupération (sender) + Livraison (receiver) visibles en mode replié */}
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {/* RÉCUPÉRATION */}
+                            <div className="flex items-start gap-2 min-w-0 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100">
+                              <div className="bg-blue-100 p-1.5 rounded-lg">
+                                <MapPin className="h-4 w-4 text-blue-600 shrink-0" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[12px] uppercase tracking-wide text-blue-700/80 font-bold mb-0.5">
+                                  Expéditeur
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-slate-800 min-w-0">
+                                  <span className="font-semibold truncate">
+                                    {delivery.sender.name}
+                                  </span>
+                                </div>
+                                <a
+                                  href={`tel:${delivery.sender.phone}`}
+                                  className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium mt-0.5"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Phone className="h-3.5 w-3.5" />
+                                  {delivery.sender.phone}
+                                </a>
+                                <div className="text-[12px] text-slate-600 truncate mt-0.5">
+                                  {delivery.sender.pickupAddress}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* LIVRAISON */}
+                            <div className="flex items-start gap-2 min-w-0 bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100">
+                              <div className="bg-emerald-100 p-1.5 rounded-lg">
+                                <MapPin className="h-4 w-4 text-emerald-600 shrink-0" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[12px] uppercase tracking-wide text-emerald-700/80 font-bold mb-0.5">
+                                  Destinataire
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-slate-800 min-w-0">
+                                  <span className="font-semibold truncate">
+                                    {delivery.receiverName}
+                                  </span>
+                                </div>
+                                <a
+                                  href={`tel:${delivery.receiverPhone}`}
+                                  className="inline-flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 font-medium mt-0.5"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Phone className="h-3.5 w-3.5" />
+                                  {delivery.receiverPhone}
+                                </a>
+                                <div className="text-[12px] text-slate-600 truncate mt-0.5">
+                                  {delivery.receiverAddress}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Remarques du livreur */}
+                          {delivery.courierRemarks && (
+                            <div className="mt-3 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <MessageSquare className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                                <div className="min-w-0">
+                                  <div className="text-[12px] font-medium text-blue-900 mb-0.5">
+                                    Mes remarques
+                                  </div>
+                                  <div className="text-sm text-blue-800">
+                                    {delivery.courierRemarks}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-sm text-slate-600">
-                          {delivery.receiverAddress}
-                        </div>
-                      </div>
-                      <Badge className={STATUS_COLORS[delivery.status]}>
-                        {STATUS_LABELS[delivery.status]}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                      </Accordion.Header>
+
+                      {/* CONTENU REPLIABLE */}
+                      <Accordion.Content className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 overflow-hidden">
+                        <Card className="border-0 shadow-none">
+                          <CardContent className="pt-0 px-4 pb-4">
+                            {/* Détails */}
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                                <div className="bg-purple-100 p-2 rounded-lg">
+                                  <Package className="h-5 w-5 text-purple-600 shrink-0" />
+                                </div>
+                                <div className="text-sm font-medium text-slate-800">
+                                  <span className="text-purple-700 font-bold">{delivery.parcelCount}</span> colis •{" "}
+                                  <span className="text-purple-700 font-bold">{delivery.weightKg}</span> kg
+                                  {delivery.description &&
+                                    ` • ${delivery.description}`}
+                                </div>
+                              </div>
+
+                              {delivery.note && (
+                                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                  <div className="text-sm font-medium text-yellow-900 mb-1">
+                                    Remarque
+                                  </div>
+                                  <div className="text-sm text-yellow-800">
+                                    {delivery.note}
+                                  </div>
+                                </div>
+                              )}
+
+                              {delivery.courierRemarks && (
+                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                  <div className="text-sm font-medium text-blue-900 mb-1">
+                                    Mes remarques
+                                  </div>
+                                  <div className="text-sm text-blue-800">
+                                    {delivery.courierRemarks}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Accordion.Content>
+                    </Accordion.Item>
+                  );
+                })}
+              </Accordion.Root>
             </div>
           )}
         </>

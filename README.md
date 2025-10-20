@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Delivery Management App
 
 Application de gestion de livraison avec authentification par rôles (ADMIN/COURIER).
@@ -55,3 +56,6 @@ Le prix est calculé automatiquement selon:
 - **Express**: Supplément selon la zone
 
 L'admin peut override le prix calculé automatiquement.
+=======
+# TOKANA_managment
+>>>>>>> 390538360c6d92670c3eac140bda701a598c0a78
