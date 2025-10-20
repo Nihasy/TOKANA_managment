@@ -131,30 +131,63 @@ export default function DeliveriesPage() {
     },
   })
 
+  // Mutation to change status
+  const changeStatusMutation = useMutation({
+    mutationFn: async ({ deliveryId, newStatus }: { deliveryId: string; newStatus: string }) => {
+      const res = await fetch(`/api/deliveries/${deliveryId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "Erreur lors du changement de statut")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+      toast({ title: "Statut mis à jour avec succès" })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erreur",
+        description: error.message,
+        variant: "destructive",
+      })
+    },
+  })
+
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-8">
+      <div className="mb-6 md:mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Livraisons</h1>
-          <p className="text-slate-600 mt-1">Gérez toutes les livraisons</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Livraisons</h1>
+          <p className="text-slate-600 mt-1 text-sm md:text-base">Gérez toutes les livraisons</p>
         </div>
-        <Link href="/admin/deliveries/new">
-          <Button className="cursor-pointer">
+        <Link href="/admin/deliveries/new" className="w-full sm:w-auto">
+          <Button className="cursor-pointer w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
-            Nouvelle livraison
+            <span className="hidden sm:inline">Nouvelle livraison</span>
+            <span className="sm:hidden">Nouvelle</span>
           </Button>
         </Link>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-slate-400" />
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-auto" />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 flex-1">
+              <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+              <Input 
+                type="date" 
+                value={date} 
+                onChange={(e) => setDate(e.target.value)} 
+                className="w-full sm:w-auto" 
+              />
             </div>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Tous les statuts" />
               </SelectTrigger>
               <SelectContent>
@@ -174,7 +207,7 @@ export default function DeliveriesPage() {
                   setDate("")
                   setStatus("ALL")
                 }}
-                className="cursor-pointer"
+                className="cursor-pointer w-full sm:w-auto"
               >
                 Réinitialiser
               </Button>
@@ -190,7 +223,150 @@ export default function DeliveriesPage() {
           ) : deliveries.length === 0 ? (
             <div className="text-center py-8 text-slate-500">Aucune livraison trouvée</div>
           ) : (
-            <Table>
+            <>
+              {/* Vue Mobile - Cards */}
+              <div className="block md:hidden space-y-4">
+                {deliveries.map((delivery) => (
+                  <Card key={delivery.id} className="border-l-4" style={{ borderLeftColor: delivery.status === 'CREATED' ? '#3b82f6' : delivery.status === 'PICKED_UP' ? '#eab308' : delivery.status === 'DELIVERED' ? '#22c55e' : delivery.status === 'PAID' ? '#10b981' : delivery.status === 'POSTPONED' ? '#f97316' : '#ef4444' }}>
+                    <CardContent className="p-4 space-y-3">
+                      {/* En-tête avec date et statut */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-sm text-slate-500">
+                          {new Date(delivery.plannedDate).toLocaleDateString("fr-FR")}
+                        </div>
+                        <Select
+                          value={delivery.status}
+                          onValueChange={(newStatus) => {
+                            changeStatusMutation.mutate({
+                              deliveryId: delivery.id,
+                              newStatus,
+                            })
+                          }}
+                          disabled={changeStatusMutation.isPending}
+                        >
+                          <SelectTrigger className={`w-[130px] h-7 text-xs cursor-pointer ${STATUS_COLORS[delivery.status]} border-0`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CREATED" className="cursor-pointer text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                                Créée
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="PICKED_UP" className="cursor-pointer text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-yellow-600"></div>
+                                Récupérée
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="DELIVERED" className="cursor-pointer text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-green-600"></div>
+                                Livrée
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="PAID" className="cursor-pointer text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-600"></div>
+                                Payée
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="POSTPONED" className="cursor-pointer text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-orange-600"></div>
+                                Reportée
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="CANCELED" className="cursor-pointer text-xs">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-red-600"></div>
+                                Annulée
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Expéditeur */}
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Expéditeur</div>
+                        <div className="font-semibold text-slate-900">{delivery.sender.name}</div>
+                      </div>
+
+                      {/* Destinataire */}
+                      <div className="bg-slate-50 p-3 rounded-lg">
+                        <div className="text-xs text-slate-500 mb-1">Destinataire</div>
+                        <div className="font-semibold text-slate-900">{delivery.receiverName}</div>
+                        <div className="text-sm text-slate-600 mt-1">{delivery.receiverPhone}</div>
+                      </div>
+
+                      {/* Zone et Express */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline">{delivery.zone}</Badge>
+                        {delivery.isExpress && <Badge variant="secondary" className="text-xs">⚡ Express</Badge>}
+                      </div>
+
+                      {/* Livreur */}
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Livreur assigné</div>
+                        <Select
+                          value={delivery.courier?.id || "UNASSIGNED"}
+                          onValueChange={(value) => {
+                            reassignCourierMutation.mutate({
+                              deliveryId: delivery.id,
+                              courierId: value === "UNASSIGNED" ? null : value,
+                            })
+                          }}
+                          disabled={reassignCourierMutation.isPending}
+                        >
+                          <SelectTrigger className="w-full cursor-pointer h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="UNASSIGNED" className="cursor-pointer">
+                              <span className="text-slate-500 italic">Non assigné</span>
+                            </SelectItem>
+                            {couriers.map((courier) => (
+                              <SelectItem key={courier.id} value={courier.id} className="cursor-pointer">
+                                {courier.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Remarques livreur */}
+                      {delivery.courierRemarks && (
+                        <div className="bg-blue-50 p-3 rounded-lg border-l-2 border-blue-400">
+                          <div className="text-xs text-blue-700 font-medium mb-1">
+                            Remarques - {delivery.courier?.name}
+                          </div>
+                          <div className="text-sm text-blue-900">{delivery.courierRemarks}</div>
+                        </div>
+                      )}
+
+                      {/* Prix et actions */}
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <div>
+                          <div className="text-xs text-slate-500">Montant</div>
+                          <div className="text-lg font-bold text-slate-900">{delivery.totalDue.toLocaleString()} Ar</div>
+                        </div>
+                        <Link href={`/admin/deliveries/${delivery.id}/edit`}>
+                          <Button size="sm" className="cursor-pointer">
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Modifier
+                          </Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Vue Desktop - Table */}
+              <div className="hidden md:block">
+                <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
@@ -248,7 +424,58 @@ export default function DeliveriesPage() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Badge className={STATUS_COLORS[delivery.status]}>{STATUS_LABELS[delivery.status]}</Badge>
+                      <Select
+                        value={delivery.status}
+                        onValueChange={(newStatus) => {
+                          changeStatusMutation.mutate({
+                            deliveryId: delivery.id,
+                            newStatus,
+                          })
+                        }}
+                        disabled={changeStatusMutation.isPending}
+                      >
+                        <SelectTrigger className={`w-[150px] cursor-pointer ${STATUS_COLORS[delivery.status]} border-0`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CREATED" className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                              Créée
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="PICKED_UP" className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-yellow-600"></div>
+                              Récupérée
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="DELIVERED" className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-green-600"></div>
+                              Livrée
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="PAID" className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-emerald-600"></div>
+                              Payée
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="POSTPONED" className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-orange-600"></div>
+                              Reportée
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="CANCELED" className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-red-600"></div>
+                              Annulée
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       {delivery.courierRemarks ? (
@@ -275,7 +502,9 @@ export default function DeliveriesPage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

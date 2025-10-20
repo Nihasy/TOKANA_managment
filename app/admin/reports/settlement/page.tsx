@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileDown, Calculator, CheckCircle2, DollarSign } from "lucide-react"
+import { FileDown, Calculator, CheckCircle2, DollarSign, FileText } from "lucide-react"
+import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -371,6 +372,29 @@ export default function SettlementReportPage() {
                   </TableRow>
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+
+          {/* Client Report Button */}
+          <Card className="mt-6 bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200">
+            <CardContent className="py-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <FileText className="h-6 w-6 text-indigo-600 mt-1 shrink-0" />
+                  <div>
+                    <h3 className="font-semibold text-slate-900 mb-1">Compte Rendu Client</h3>
+                    <p className="text-sm text-slate-600">
+                      Générez des comptes rendus détaillés pour informer vos clients de l'état de leurs livraisons
+                    </p>
+                  </div>
+                </div>
+                <Link href="/admin/reports/client-summary" className="w-full sm:w-auto">
+                  <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 cursor-pointer">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Accéder aux comptes rendus
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </>
