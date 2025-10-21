@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState } from "react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,7 +12,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Package } from "lucide-react"
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -39,7 +37,7 @@ export default function LoginPage() {
 
       // Redirect based on role - we'll fetch the session to determine
       window.location.href = "/admin"
-    } catch (error) {
+    } catch {
       setError("Une erreur est survenue")
       setIsLoading(false)
     }

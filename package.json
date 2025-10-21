@@ -9,8 +9,7 @@
     "lint": "next lint",
     "prisma:gen": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:seed": "tsx prisma/seed.ts",
-    "prisma:reset": "tsx prisma/reset-data.ts"
+    "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.17.1",

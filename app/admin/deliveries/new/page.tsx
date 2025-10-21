@@ -17,6 +17,17 @@ import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import { computePrice, type Zone } from "@/lib/pricing"
 
+interface Client {
+  id: string
+  name: string
+  phone: string
+}
+
+interface Courier {
+  id: string
+  name: string
+}
+
 export default function NewDeliveryPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -124,9 +135,13 @@ export default function NewDeliveryPage() {
         : formData.deliveryPrice + (formData.collectAmount || 0))  // Sinon tout
   
   // Calcul du montant à remettre au client (peut être négatif = débit)
-  const amountToReturnToClient = formData.deliveryFeePrepaid
-    ? (formData.collectAmount || 0) - formData.deliveryPrice  // Si frais prépayés, on déduit les frais
-    : (formData.collectAmount || 0)  // Sinon, montant collecté sans les frais
+  const amountToReturnToClient = !formData.isPrepaid
+    ? (formData.deliveryFeePrepaid 
+        ? (formData.collectAmount || 0)  // Frais prépayés, on rend tout
+        : (formData.collectAmount || 0) - formData.deliveryPrice)  // On déduit les frais
+    : (!formData.deliveryFeePrepaid 
+        ? -formData.deliveryPrice  // Client doit les frais
+        : 0)  // Tout prépayé, rien à régler
 
   return (
     <div className="p-8">
@@ -173,7 +188,7 @@ export default function NewDeliveryPage() {
                     <SelectValue placeholder="Sélectionner un client" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((client: any) => (
+                    {clients.map((client: Client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name} - {client.phone}
                       </SelectItem>
@@ -194,7 +209,7 @@ export default function NewDeliveryPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="UNASSIGNED">Non assigné</SelectItem>
-                    {couriers.map((courier: any) => (
+                    {couriers.map((courier: Courier) => (
                       <SelectItem key={courier.id} value={courier.id}>
                         {courier.name}
                       </SelectItem>

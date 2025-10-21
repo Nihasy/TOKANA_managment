@@ -18,7 +18,7 @@ export const deliverySchema = z.object({
   collectAmount: z.number().int().min(0).optional(),
   isPrepaid: z.boolean().optional(),
   deliveryFeePrepaid: z.boolean().optional(),
-  courierId: z.string().optional(),
+  courierId: z.string().nullable().optional(),
 })
 
 export type DeliveryFormData = z.infer<typeof deliverySchema>

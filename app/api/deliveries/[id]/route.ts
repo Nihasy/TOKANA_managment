@@ -42,11 +42,11 @@ export async function GET(
     }
 
     return NextResponse.json(delivery);
-  } catch (error: any) {
+  } catch (error) {
     console.error("GET /api/deliveries/[id]:", error);
     return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
-      { status: error.status || 500 }
+      { error: error instanceof Error ? error.message : "Erreur serveur" },
+      { status: 500 }
     );
   }
 }
@@ -57,12 +57,15 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireAdmin();
+    await requireAdmin();
     const { id } = await params;
     const body = await request.json();
 
+    console.log('📥 PATCH /api/deliveries/[id] - Body reçu:', body);
+
     // Validate input
     const validatedData = deliverySchema.parse(body);
+    console.log('✅ Validation réussie:', validatedData);
 
     // Check if delivery exists
     const existingDelivery = await prisma.delivery.findUnique({
@@ -123,7 +126,7 @@ export async function PATCH(
         deliveryPrice,
         autoPrice: deliveryPrice,
         totalDue,
-        courierId: validatedData.courierId === "UNASSIGNED" ? null : validatedData.courierId,
+        courierId: validatedData.courierId && validatedData.courierId !== "UNASSIGNED" ? validatedData.courierId : null,
       },
       include: {
         sender: {
@@ -145,11 +148,26 @@ export async function PATCH(
     });
 
     return NextResponse.json(delivery);
-  } catch (error: any) {
-    console.error("PATCH /api/deliveries/[id]:", error);
+  } catch (error) {
+    console.error("❌ PATCH /api/deliveries/[id] - Erreur:", error);
+    
+    // Si c'est une erreur Zod, renvoyer les détails
+    if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError' && 'errors' in error) {
+      console.error("❌ Erreur de validation Zod:", error.errors);
+      const zodErrors = error.errors as Array<{ path: Array<string | number>; message: string }>;
+      return NextResponse.json(
+        { 
+          error: "Erreur de validation", 
+          details: error.errors,
+          message: zodErrors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')
+        },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: error.message || "Erreur lors de la mise à jour" },
-      { status: error.status || 500 }
+      { error: error instanceof Error ? error.message : "Erreur lors de la mise à jour" },
+      { status: 500 }
     );
   }
 }
@@ -188,11 +206,11 @@ export async function DELETE(
     });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error("DELETE /api/deliveries/[id]:", error);
     return NextResponse.json(
-      { error: error.message || "Erreur lors de la suppression" },
-      { status: error.status || 500 }
+      { error: error instanceof Error ? error.message : "Erreur lors de la suppression" },
+      { status: 500 }
     );
   }
 }

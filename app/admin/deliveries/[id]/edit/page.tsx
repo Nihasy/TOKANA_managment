@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import { computePrice, type Zone } from "@/lib/pricing"
@@ -152,7 +152,7 @@ export default function EditDeliveryPage() {
     }
   }, [delivery])
 
-  // Calculate auto price when zone, weight, parcelCount, or express changes
+  // Calculate auto price when zone, weight, or express changes
   useEffect(() => {
     // Only calculate if we have valid data
     if (!formData.zone || !formData.weightKg) {
@@ -160,10 +160,16 @@ export default function EditDeliveryPage() {
     }
     
     try {
-      const deliveryPrice = computePrice({
+      const deliveryPrice = Math.round(computePrice({
         zone: formData.zone,
         weightKg: formData.weightKg,
         isExpress: formData.isExpress,
+      }))
+      console.log('💰 Prix calculé automatiquement:', {
+        zone: formData.zone,
+        weightKg: formData.weightKg,
+        isExpress: formData.isExpress,
+        deliveryPrice,
       })
       setFormData((prev) => ({ ...prev, deliveryPrice }))
     } catch (error) {
@@ -177,10 +183,28 @@ export default function EditDeliveryPage() {
       console.log('🔄 Mise à jour de la livraison...', deliveryId)
       console.log('📤 Données envoyées:', data)
       
-      const payload = {
-        ...data,
-        collectAmount: data.collectAmount || 0,
-        courierId: data.courierId === "UNASSIGNED" ? undefined : data.courierId,
+      // Préparer le payload en nettoyant les valeurs undefined
+      const payload: Record<string, unknown> = {
+        plannedDate: data.plannedDate,
+        senderId: data.senderId,
+        receiverName: data.receiverName,
+        receiverPhone: data.receiverPhone,
+        receiverAddress: data.receiverAddress,
+        parcelCount: Math.round(data.parcelCount),
+        weightKg: data.weightKg,
+        description: data.description,
+        note: data.note,
+        zone: data.zone,
+        isExpress: data.isExpress,
+        deliveryPrice: Math.round(data.deliveryPrice),
+        collectAmount: Math.round(data.collectAmount || 0),
+        isPrepaid: data.isPrepaid,
+        deliveryFeePrepaid: data.deliveryFeePrepaid,
+      }
+      
+      // N'ajouter courierId que s'il est assigné (pas "UNASSIGNED")
+      if (data.courierId && data.courierId !== "UNASSIGNED") {
+        payload.courierId = data.courierId
       }
       console.log('📦 Payload final:', payload)
       
@@ -193,23 +217,30 @@ export default function EditDeliveryPage() {
       console.log('📡 Réponse API - Status:', res.status, res.statusText)
 
       if (!res.ok) {
-        let errorDetails;
+        let errorDetails: Record<string, unknown>;
         try {
           errorDetails = await res.json()
-        } catch (e) {
+        } catch {
           errorDetails = { error: `Erreur HTTP ${res.status}: ${res.statusText}` }
         }
         console.error('❌ Erreur API:', errorDetails)
         console.error('❌ Status:', res.status)
         console.error('❌ URL:', res.url)
-        throw new Error(errorDetails.error || `Erreur ${res.status}: ${res.statusText}`)
+        console.error('❌ Payload envoyé:', payload)
+        
+        // Afficher les détails de validation si disponibles
+        if (errorDetails.details) {
+          console.error('❌ Détails de validation:', errorDetails.details)
+        }
+        
+        throw new Error(errorDetails.message || errorDetails.error || `Erreur ${res.status}: ${res.statusText}`)
       }
 
       const result = await res.json()
       console.log('✅ Livraison mise à jour:', result)
       return result
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       console.log('✅ Mutation réussie, invalidation des queries...')
       queryClient.invalidateQueries({ queryKey: ["deliveries"] })
       queryClient.invalidateQueries({ queryKey: ["delivery", deliveryId] })
@@ -235,9 +266,48 @@ export default function EditDeliveryPage() {
     },
   })
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/deliveries/${deliveryId}`, {
+        method: "DELETE",
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Erreur lors de la suppression")
+      }
+
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] })
+      
+      toast({ 
+        title: "✅ Succès", 
+        description: "Livraison supprimée avec succès",
+      })
+      
+      router.push("/admin/deliveries")
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "❌ Erreur",
+        description: error.message,
+        variant: "destructive",
+      })
+    },
+  })
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     updateMutation.mutate(formData)
+  }
+
+  const handleDelete = () => {
+    if (confirm("⚠️ Êtes-vous sûr de vouloir supprimer cette livraison ? Cette action est irréversible.")) {
+      deleteMutation.mutate()
+    }
   }
 
   if (isLoadingDelivery) {
@@ -263,9 +333,13 @@ export default function EditDeliveryPage() {
         : formData.deliveryPrice + (formData.collectAmount || 0))  // Sinon tout
   
   // Calcul du montant à remettre au client (peut être négatif = débit)
-  const amountToReturnToClient = formData.deliveryFeePrepaid
-    ? (formData.collectAmount || 0) - formData.deliveryPrice  // Si frais prépayés, on déduit les frais
-    : (formData.collectAmount || 0)  // Sinon, montant collecté sans les frais
+  const amountToReturnToClient = !formData.isPrepaid
+    ? (formData.deliveryFeePrepaid 
+        ? (formData.collectAmount || 0)  // Frais prépayés, on rend tout
+        : (formData.collectAmount || 0) - formData.deliveryPrice)  // On déduit les frais
+    : (!formData.deliveryFeePrepaid 
+        ? -formData.deliveryPrice  // Client doit les frais
+        : 0)  // Tout prépayé, rien à régler
 
   return (
     <div className="p-8 relative">
@@ -352,7 +426,7 @@ export default function EditDeliveryPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-slate-500">
-                  Laissez "Non assigné" pour assigner plus tard
+                  Laissez &quot;Non assigné&quot; pour assigner plus tard
                 </p>
               </div>
             </CardContent>
@@ -472,9 +546,9 @@ export default function EditDeliveryPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="TANA">Tana (ville)</SelectItem>
-                    <SelectItem value="PERIPH">Périphérie (15-30 km)</SelectItem>
-                    <SelectItem value="PROVINCE">Province</SelectItem>
+                    <SelectItem value="TANA">Tana-Ville</SelectItem>
+                    <SelectItem value="PERI">Périphérie</SelectItem>
+                    <SelectItem value="SUPER">Super-Périphérie</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -621,31 +695,56 @@ export default function EditDeliveryPage() {
           </Card>
         </div>
 
-        <div className="flex gap-4 mt-6">
-          <Button 
-            type="submit" 
-            disabled={updateMutation.isPending}
-            className="cursor-pointer disabled:cursor-not-allowed"
-          >
-            {updateMutation.isPending ? (
-              <>
-                <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Mise à jour...
-              </>
-            ) : (
-              "Mettre à jour"
-            )}
-          </Button>
-          <Link href="/admin/deliveries">
+        <div className="flex flex-col sm:flex-row gap-4 mt-6">
+          <div className="flex gap-4">
             <Button 
-              type="button" 
-              variant="outline" 
-              disabled={updateMutation.isPending}
+              type="submit" 
+              disabled={updateMutation.isPending || deleteMutation.isPending}
               className="cursor-pointer disabled:cursor-not-allowed"
             >
-              Annuler
+              {updateMutation.isPending ? (
+                <>
+                  <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Mise à jour...
+                </>
+              ) : (
+                "Mettre à jour"
+              )}
             </Button>
-          </Link>
+            <Link href="/admin/deliveries">
+              <Button 
+                type="button" 
+                variant="outline" 
+                disabled={updateMutation.isPending || deleteMutation.isPending}
+                className="cursor-pointer disabled:cursor-not-allowed"
+              >
+                Annuler
+              </Button>
+            </Link>
+          </div>
+          
+          {/* Bouton Supprimer - Séparé à droite */}
+          <div className="sm:ml-auto">
+            <Button 
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={updateMutation.isPending || deleteMutation.isPending}
+              className="cursor-pointer disabled:cursor-not-allowed w-full sm:w-auto"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Suppression...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Supprimer
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

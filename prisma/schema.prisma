@@ -94,6 +94,7 @@ model Delivery {
 
   status      DeliveryStatus @default(CREATED)
   postponedTo DateTime?
+  originalPlannedDate DateTime? // Date d'origine avant le premier report
 
   courierId String?
   courier   User?   @relation("CourierDeliveries", fields: [courierId], references: [id])

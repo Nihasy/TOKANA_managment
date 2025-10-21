@@ -38,13 +38,24 @@ export async function GET(request: Request) {
     }
 
     // Get all deliveries for this client in the date range
+    // Inclure les livraisons dont plannedDate OU originalPlannedDate est dans la période
     const deliveries = await prisma.delivery.findMany({
       where: {
         senderId: clientId,
-        plannedDate: {
-          gte: startDate,
-          lte: endDate,
-        },
+        OR: [
+          {
+            plannedDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+          {
+            originalPlannedDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        ],
       },
       select: {
         id: true,
@@ -53,6 +64,8 @@ export async function GET(request: Request) {
         receiverAddress: true,
         status: true,
         plannedDate: true,
+        originalPlannedDate: true,
+        postponedTo: true,
         courierRemarks: true,
         collectAmount: true,
         deliveryPrice: true,
@@ -65,7 +78,13 @@ export async function GET(request: Request) {
 
     // Calculate statistics and amounts
     let totalToRemit = 0
-    deliveries.forEach((d) => {
+    
+    // Filtrer uniquement les livraisons effectuées (DELIVERED ou PAID)
+    const deliveredDeliveries = deliveries.filter(
+      (d) => d.status === "DELIVERED" || d.status === "PAID"
+    )
+    
+    deliveredDeliveries.forEach((d) => {
       // Calculer le montant à remettre selon la logique de règlement J+1
       if (!d.isPrepaid) {
         // Cas normal : on collecte l'argent

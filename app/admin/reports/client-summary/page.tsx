@@ -34,6 +34,7 @@ interface ClientSummary {
     receiverAddress: string
     status: string
     plannedDate: string
+    postponedTo?: string | null
     courierRemarks?: string
     collectAmount: number | null
     deliveryPrice: number
@@ -43,28 +44,8 @@ interface ClientSummary {
   }>
 }
 
-// Notes prédéfinies pour les comptes rendus
-const PREDEFINED_NOTES = [
-  "Livraison effectuée avec succès",
-  "Client satisfait",
-  "Destinataire absent - livraison reportée",
-  "Adresse incorrecte",
-  "Destinataire refuse le colis",
-  "Zone inaccessible",
-  "Délai de livraison respecté",
-  "Livraison express réussie",
-  "Client demande un report",
-  "Problème de paiement",
-]
-
-const STATUS_COLORS: Record<string, string> = {
-  DELIVERED: "bg-green-100 text-green-800",
-  PAID: "bg-emerald-100 text-emerald-800",
-  POSTPONED: "bg-orange-100 text-orange-800",
-  CANCELED: "bg-red-100 text-red-800",
-  CREATED: "bg-blue-100 text-blue-800",
-  PICKED_UP: "bg-yellow-100 text-yellow-800",
-}
+// Removed unused PREDEFINED_NOTES and STATUS_COLORS
+// Using SIMPLIFIED_STATUS_LABELS and SIMPLIFIED_STATUS_COLORS instead
 
 // Statuts simplifiés pour le compte rendu client
 const SIMPLIFIED_STATUS_LABELS: Record<string, string> = {
@@ -89,10 +70,10 @@ const SIMPLIFIED_STATUS_LABELS_PDF: Record<string, string> = {
 const SIMPLIFIED_STATUS_COLORS: Record<string, string> = {
   DELIVERED: "bg-green-100 text-green-800",
   PAID: "bg-green-100 text-green-800",
-  POSTPONED: "bg-orange-100 text-orange-800",
+  POSTPONED: "bg-purple-100 text-purple-800",
   CANCELED: "bg-red-100 text-red-800",
-  CREATED: "bg-blue-100 text-blue-800",
-  PICKED_UP: "bg-blue-100 text-blue-800",
+  CREATED: "bg-slate-100 text-slate-700",
+  PICKED_UP: "bg-yellow-100 text-yellow-800",
 }
 
 // Fonction helper pour calculer le montant à remettre par livraison
@@ -297,72 +278,205 @@ export default function ClientSummaryPage() {
     yPos = 144
     doc.setTextColor(0, 0, 0)
     
-    const tableData = clientSummary.deliveries.map(d => {
+    // Fonction pour tronquer intelligemment le texte selon la largeur de cellule
+    const truncateText = (text: string, maxChars: number): string => {
+      if (!text || text.length <= maxChars) return text
+      return text.substring(0, maxChars - 3) + '...'
+    }
+    
+    // Fonction pour formater les numéros de téléphone de manière compacte
+    const formatPhone = (phone: string): string => {
+      // Retirer tous les espaces et caractères non numériques sauf +
+      const cleaned = phone.replace(/[^\d+]/g, '')
+      // Si commence par +261, format compact
+      if (cleaned.startsWith('+261')) {
+        return cleaned.substring(4) // Retirer +261
+      }
+      // Sinon retourner tel quel (tronqué si trop long)
+      return truncateText(cleaned, 11)
+    }
+    
+    // Numéroter les livraisons pour référence dans l'annexe
+    const tableData = clientSummary.deliveries.map((d, index) => {
       const amountToRemit = calculateAmountToRemit(d)
+      
+      // Ajouter un numéro si il y a des remarques
+      const numRef = d.courierRemarks ? ` [${index + 1}]` : ""
+      
+      // Calculer l'espace disponible pour le nom (en tenant compte du numéro)
+      const nameMaxLength = numRef ? 22 : 28
+      
       return [
         new Date(d.plannedDate).toLocaleDateString("fr-FR", { day: '2-digit', month: '2-digit' }),
-        d.receiverName.length > 25 ? d.receiverName.substring(0, 25) + '...' : d.receiverName,
-        d.receiverPhone,
+        truncateText(d.receiverName, nameMaxLength) + numRef,
+        formatPhone(d.receiverPhone),
         SIMPLIFIED_STATUS_LABELS_PDF[d.status],
-        `${formatAmount(d.collectAmount || 0)} Ar`,
-        `${formatAmount(d.deliveryPrice)} Ar`,
-        `${formatAmount(amountToRemit)} Ar`,
-        d.courierRemarks && d.courierRemarks.length > 30 ? d.courierRemarks.substring(0, 30) + '...' : d.courierRemarks || "-"
+        formatAmount(d.collectAmount || 0),
+        formatAmount(d.deliveryPrice),
+        formatAmount(amountToRemit)
       ]
     })
 
     autoTable(doc, {
       startY: yPos,
-      head: [["Date", "Destinataire", "Telephone", "Statut", "Collecte", "Frais", "A Remettre", "Remarques"]],
+      head: [["Date", "Destinataire", "Tel.", "Statut", "Collecte", "Frais", "A Rem."]],
       body: tableData,
       theme: "grid",
       headStyles: {
         fillColor: [59, 130, 246],
         textColor: [255, 255, 255],
         fontStyle: "bold",
-        fontSize: 10,
+        fontSize: 8.5,
         halign: "center",
         valign: "middle",
-        cellPadding: 4,
+        cellPadding: 1.5,
+        minCellHeight: 7,
         lineColor: [59, 130, 246],
-        lineWidth: 0.5
+        lineWidth: 0.5,
+        overflow: 'linebreak'
       },
       bodyStyles: {
-        fontSize: 9,
-        cellPadding: 3.5,
+        fontSize: 7.5,
+        cellPadding: 1.5,
         valign: "middle",
+        minCellHeight: 6.5,
         lineColor: [180, 180, 180],
-        lineWidth: 0.3
+        lineWidth: 0.3,
+        overflow: 'linebreak',
+        cellWidth: 'wrap'
       },
       columnStyles: {
-        0: { cellWidth: 20, halign: "center" }, // Date
-        1: { cellWidth: 38 }, // Destinataire
-        2: { cellWidth: 26, halign: "center" }, // Téléphone
-        3: { cellWidth: 22, halign: "center" }, // Statut
-        4: { cellWidth: 26, halign: "right" }, // Collecté
-        5: { cellWidth: 22, halign: "right" }, // Frais
-        6: { cellWidth: 28, halign: "right", fontStyle: "bold", textColor: [16, 185, 129] }, // À Remettre
-        7: { cellWidth: 0 } // Remarques - auto width
+        0: { cellWidth: 17, halign: "center", overflow: 'linebreak' }, // Date
+        1: { cellWidth: 50, halign: "left", overflow: 'linebreak' }, // Destinataire - Élargi
+        2: { cellWidth: 23, halign: "center", overflow: 'linebreak' }, // Tel
+        3: { cellWidth: 20, halign: "center", overflow: 'linebreak' }, // Statut
+        4: { cellWidth: 22, halign: "right", overflow: 'linebreak' }, // Collecte (sans "Ar")
+        5: { cellWidth: 20, halign: "right", overflow: 'linebreak' }, // Frais (sans "Ar")
+        6: { cellWidth: 22, halign: "right", fontStyle: "bold", overflow: 'linebreak' } // A Rem. (couleur dynamique)
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252]
       },
-      margin: { left: 10, right: 10 }
+      margin: { left: 10, right: 10 },
+      rowPageBreak: 'auto',
+      tableLineWidth: 0.3,
+      tableLineColor: [180, 180, 180],
+      didParseCell: function(data) {
+        // Gérer la couleur dynamique de la colonne "A Rem." (colonne 6)
+        if (data.column.index === 6 && data.section === 'body') {
+          const amountText = data.cell.raw as string
+          // Extraire le nombre (retirer les espaces)
+          const amount = parseInt(amountText.replace(/\s/g, ''))
+          
+          if (amount < 0) {
+            // Rouge pour les montants négatifs
+            data.cell.styles.textColor = [220, 38, 38] // red-600
+          } else {
+            // Vert pour les montants positifs ou nuls
+            data.cell.styles.textColor = [16, 185, 129] // emerald-500
+          }
+        }
+        
+        // S'assurer que le texte ne déborde pas
+        if (data.cell.raw && typeof data.cell.raw === 'string') {
+          data.cell.text = [data.cell.raw]
+        }
+      }
     })
 
-    // Ligne de total final
-    const finalY = (doc as any).lastAutoTable.finalY + 2
+    // Ligne de total final - Plus compact
+    const finalY = (doc as typeof jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 150
+    const adjustedY = finalY + 2
     doc.setFillColor(16, 185, 129)
     doc.setDrawColor(16, 185, 129)
-    doc.rect(10, finalY, 190, 16, "FD")
+    doc.rect(10, adjustedY, 190, 12, "FD")
     
     doc.setTextColor(255, 255, 255)
-    doc.setFontSize(13)
+    doc.setFontSize(11)
     doc.setFont("helvetica", "bold")
-    doc.text("MONTANT TOTAL A REMETTRE:", 15, finalY + 10)
-    doc.setFontSize(15)
+    doc.text("MONTANT TOTAL A REMETTRE:", 15, adjustedY + 8)
+    doc.setFontSize(13)
     const finalAmount = `${formatAmount(clientSummary.stats.totalToRemit)} Ar`
-    doc.text(finalAmount, 195, finalY + 10, { align: "right" })
+    doc.text(finalAmount, 195, adjustedY + 8, { align: "right" })
+
+    // ANNEXE : REMARQUES
+    const deliveriesWithRemarks = clientSummary.deliveries
+      .map((d, index) => ({ ...d, index: index + 1 }))
+      .filter(d => d.courierRemarks && d.courierRemarks.trim() !== "")
+    
+    if (deliveriesWithRemarks.length > 0) {
+      adjustedY = adjustedY + 20 // Espace après le total
+      
+      // Vérifier si on a assez d'espace pour l'en-tête de l'annexe
+      if (adjustedY > 250) {
+        doc.addPage()
+        adjustedY = 20
+      }
+      
+      // En-tête de l'annexe
+      doc.setFillColor(71, 85, 105) // Slate-600
+      doc.rect(10, adjustedY, 190, 10, "F")
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont("helvetica", "bold")
+      doc.text("ANNEXE : REMARQUES", 105, adjustedY + 7, { align: "center" })
+      
+      adjustedY = adjustedY + 15
+      
+      // Afficher chaque remarque
+      deliveriesWithRemarks.forEach((delivery) => {
+        // Vérifier si on a assez d'espace (minimum 20mm pour une remarque)
+        if (adjustedY > 260) {
+          doc.addPage()
+          adjustedY = 20
+        }
+        
+        // Encadré pour chaque remarque
+        doc.setDrawColor(203, 213, 225) // Slate-300
+        doc.setFillColor(248, 250, 252) // Slate-50
+        
+        // Calculer la hauteur nécessaire pour la remarque
+        const maxWidth = 175
+        const remarkText = delivery.courierRemarks || ""
+        const lines = doc.splitTextToSize(remarkText, maxWidth)
+        const boxHeight = Math.max(15, 8 + lines.length * 4)
+        
+        // Vérifier à nouveau avec la hauteur réelle
+        if (adjustedY + boxHeight > 280) {
+          doc.addPage()
+          adjustedY = 20
+        }
+        
+        doc.rect(10, adjustedY, 190, boxHeight, "FD")
+        
+        // Numéro et destinataire (avec troncature si nécessaire)
+        doc.setTextColor(30, 58, 138) // Blue-900
+        doc.setFontSize(9)
+        doc.setFont("helvetica", "bold")
+        const nameWithRef = `[${delivery.index}] ${delivery.receiverName}`
+        // Tronquer le nom si trop long (laisser de l'espace pour la date)
+        const truncatedName = nameWithRef.length > 45 
+          ? `[${delivery.index}] ${delivery.receiverName.substring(0, 42)}...` 
+          : nameWithRef
+        doc.text(truncatedName, 15, adjustedY + 6, { maxWidth: 140 })
+        
+        // Date
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(8)
+        doc.setTextColor(100, 116, 139) // Slate-500
+        const dateText = new Date(delivery.plannedDate).toLocaleDateString("fr-FR")
+        doc.text(dateText, 195, adjustedY + 6, { align: "right" })
+        
+        // Remarque (avec retour à la ligne automatique)
+        doc.setTextColor(51, 65, 85) // Slate-700
+        doc.setFontSize(8)
+        doc.setFont("helvetica", "normal")
+        doc.text(lines, 15, adjustedY + 12)
+        
+        adjustedY = adjustedY + boxHeight + 3 // Espace entre les remarques
+      })
+    }
 
     // Pied de page amélioré
     const pageCount = doc.getNumberOfPages()
@@ -391,37 +505,37 @@ export default function ClientSummaryPage() {
   }
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Compte Rendu Client</h1>
-        <p className="text-slate-600 mt-1 text-sm md:text-base">Générez des comptes rendus pour informer vos clients</p>
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8">
+      <div className="mb-4 sm:mb-6 md:mb-8">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">Compte Rendu Client</h1>
+        <p className="text-slate-600 mt-1 text-xs sm:text-sm md:text-base">Générez des comptes rendus pour informer vos clients</p>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Filtres</CardTitle>
+      <Card className="mb-4 sm:mb-6">
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="text-base sm:text-lg">Filtres</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Date de début</Label>
-              <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <div className="grid gap-3 sm:gap-4 md:grid-cols-3">
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="startDate" className="text-xs sm:text-sm">Date de début</Label>
+              <Input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-sm" />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="endDate">Date de fin</Label>
-              <Input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="endDate" className="text-xs sm:text-sm">Date de fin</Label>
+              <Input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-sm" />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="client">Client</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="client" className="text-xs sm:text-sm">Client</Label>
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger>
+                <SelectTrigger className="text-sm">
                   <SelectValue placeholder="Sélectionner un client" />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((client: any) => (
-                    <SelectItem key={client.id} value={client.id}>
+                  {clients.map((client: { id: string; name: string }) => (
+                    <SelectItem key={client.id} value={client.id} className="text-sm">
                       {client.name}
                     </SelectItem>
                   ))}
@@ -455,7 +569,7 @@ export default function ClientSummaryPage() {
       ) : (
         <>
           {/* Client Info et Montant Total - Côte à côte */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6 mb-4 sm:mb-6">
             {/* Client Info */}
             <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
               <CardContent className="py-6">
@@ -578,9 +692,16 @@ export default function ClientSummaryPage() {
                       <div className="text-sm text-slate-500">
                         {new Date(delivery.plannedDate).toLocaleDateString("fr-FR")}
                       </div>
-                      <Badge className={SIMPLIFIED_STATUS_COLORS[delivery.status]}>
-                        {SIMPLIFIED_STATUS_LABELS[delivery.status]}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className={SIMPLIFIED_STATUS_COLORS[delivery.status]}>
+                          {SIMPLIFIED_STATUS_LABELS[delivery.status]}
+                        </Badge>
+                        {delivery.status === 'POSTPONED' && delivery.postponedTo && (
+                          <span className="text-xs text-purple-600">
+                            Reportée au {new Date(delivery.postponedTo).toLocaleDateString("fr-FR")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     <div>
@@ -649,9 +770,16 @@ export default function ClientSummaryPage() {
                         <TableCell>{delivery.receiverPhone}</TableCell>
                         <TableCell className="text-slate-600 max-w-xs truncate">{delivery.receiverAddress}</TableCell>
                         <TableCell>
-                          <Badge className={SIMPLIFIED_STATUS_COLORS[delivery.status]}>
-                            {SIMPLIFIED_STATUS_LABELS[delivery.status]}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={SIMPLIFIED_STATUS_COLORS[delivery.status]}>
+                              {SIMPLIFIED_STATUS_LABELS[delivery.status]}
+                            </Badge>
+                            {delivery.status === 'POSTPONED' && delivery.postponedTo && (
+                              <span className="text-xs text-purple-600">
+                                Reportée au {new Date(delivery.postponedTo).toLocaleDateString("fr-FR")}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">{(delivery.collectAmount || 0).toLocaleString()} Ar</TableCell>
                         <TableCell className="text-right">{delivery.deliveryPrice.toLocaleString()} Ar</TableCell>

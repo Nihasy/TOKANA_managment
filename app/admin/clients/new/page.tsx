@@ -41,7 +41,7 @@ export default function NewClientPage() {
 
       toast({ title: "Client créé avec succès" })
       router.push("/admin/clients")
-    } catch (error) {
+    } catch {
       toast({ title: "Erreur lors de la création", variant: "destructive" })
       setIsLoading(false)
     }

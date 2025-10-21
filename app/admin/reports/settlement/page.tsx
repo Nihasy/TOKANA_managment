@@ -118,7 +118,7 @@ export default function SettlementReportPage() {
   const exportToCSV = () => {
     if (!settlementData) return
 
-    const courier = couriers.find((c: any) => c.id === courierId)
+    const courier = couriers.find((c: { id: string; name: string }) => c.id === courierId)
     const courierName = courier?.name || "Unknown"
 
     // CSV headers
@@ -190,7 +190,7 @@ export default function SettlementReportPage() {
                   <SelectValue placeholder="Sélectionner un livreur" />
                 </SelectTrigger>
                 <SelectContent>
-                  {couriers.map((courier: any) => (
+                  {couriers.map((courier: { id: string; name: string }) => (
                     <SelectItem key={courier.id} value={courier.id}>
                       {courier.name}
                     </SelectItem>
@@ -272,10 +272,10 @@ export default function SettlementReportPage() {
                     <DollarSign className="h-6 w-6 text-green-600 mt-1" />
                     <div>
                       <h3 className="font-semibold text-slate-900 mb-1">
-                        Confirmer la réception de l'argent
+                        Confirmer la réception de l&apos;argent
                       </h3>
                       <p className="text-sm text-slate-600">
-                        Le livreur {couriers.find((c: any) => c.id === courierId)?.name} doit vous remettre{" "}
+                        Le livreur {couriers.find((c: { id: string; name: string }) => c.id === courierId)?.name} doit vous remettre{" "}
                         <span className="font-bold text-green-700">
                           {settlementData.summary.totalARemettre.toLocaleString()} Ar
                         </span>
@@ -304,7 +304,7 @@ export default function SettlementReportPage() {
                       ✅ Règlement confirmé
                     </h3>
                     <p className="text-sm text-green-700">
-                      L'argent a été reçu du livreur et enregistré
+                      L&apos;argent a été reçu du livreur et enregistré
                     </p>
                   </div>
                 </div>
@@ -384,7 +384,7 @@ export default function SettlementReportPage() {
                   <div>
                     <h3 className="font-semibold text-slate-900 mb-1">Compte Rendu Client</h3>
                     <p className="text-sm text-slate-600">
-                      Générez des comptes rendus détaillés pour informer vos clients de l'état de leurs livraisons
+                      Générez des comptes rendus détaillés pour informer vos clients de l&apos;état de leurs livraisons
                     </p>
                   </div>
                 </div>
@@ -404,9 +404,9 @@ export default function SettlementReportPage() {
       <Dialog open={confirmDialog} onOpenChange={setConfirmDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmer la réception de l'argent</DialogTitle>
+            <DialogTitle>Confirmer la réception de l&apos;argent</DialogTitle>
             <DialogDescription>
-              Confirmez que vous avez reçu l'argent du livreur
+              Confirmez que vous avez reçu l&apos;argent du livreur
             </DialogDescription>
           </DialogHeader>
           {settlementData && (
@@ -416,7 +416,7 @@ export default function SettlementReportPage() {
                   <DollarSign className="h-8 w-8 text-green-600" />
                   <div>
                     <div className="font-semibold text-slate-900">
-                      {couriers.find((c: any) => c.id === courierId)?.name}
+                      {couriers.find((c: { id: string; name: string }) => c.id === courierId)?.name}
                     </div>
                     <div className="text-sm text-slate-600">
                       {settlementData.summary.nbLivraisons} livraison(s) - Du {new Date(startDate).toLocaleDateString("fr-FR")} au {new Date(endDate).toLocaleDateString("fr-FR")}
@@ -446,7 +446,7 @@ export default function SettlementReportPage() {
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-5 w-5 text-amber-600 mt-0.5" />
                   <div className="text-sm text-amber-800">
-                    Cette action enregistrera que vous avez reçu l'argent du livreur. Cette opération est irréversible.
+                    Cette action enregistrera que vous avez reçu l&apos;argent du livreur. Cette opération est irréversible.
                   </div>
                 </div>
               </div>

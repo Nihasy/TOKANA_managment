@@ -15,6 +15,7 @@ import {
   Calendar,
   TrendingUp,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -25,6 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ClientSettlement {
   client: {
@@ -135,13 +138,126 @@ export default function SettlementsPage() {
     }
   };
 
+  // Generate PDF Invoice
+  const generateInvoice = (clientData: ClientSettlement) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    
+    // Header
+    doc.setFillColor(71, 85, 105); // slate-600
+    doc.rect(0, 0, pageWidth, 40, "F");
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text("FACTURE DE REGLEMENT", pageWidth / 2, 20, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Tokana Delivery Management", pageWidth / 2, 30, { align: "center" });
+    
+    // Date
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`Date d'emission: ${new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`, 14, 50);
+    doc.text(`Periode: Jusqu'au ${new Date(maxDate).toLocaleDateString("fr-FR")}`, 14, 56);
+    
+    // Client Info
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("CLIENT", 14, 68);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(clientData.client.name, 14, 75);
+    doc.text(`Tel: ${clientData.client.phone}`, 14, 81);
+    doc.text(`Adresse: ${clientData.client.pickupAddress}`, 14, 87);
+    
+    // Deliveries Table
+    const tableData = clientData.deliveries.map((delivery) => {
+      const collectAmount = delivery.collectAmount || 0;
+      const deliveryFee = delivery.deliveryPrice;
+      let netAmount = 0;
+      
+      if (delivery.isPrepaid) {
+        netAmount = delivery.deliveryFeePrepaid ? 0 : -deliveryFee;
+      } else {
+        netAmount = delivery.deliveryFeePrepaid ? collectAmount : collectAmount - deliveryFee;
+      }
+      
+      return [
+        delivery.receiverName,
+        new Date(delivery.plannedDate).toLocaleDateString("fr-FR"),
+        `${collectAmount.toLocaleString("fr-FR").replace(/\s/g, " ")} Ar`,
+        `${deliveryFee.toLocaleString("fr-FR").replace(/\s/g, " ")} Ar`,
+        delivery.isPrepaid ? "Oui" : "Non",
+        delivery.deliveryFeePrepaid ? "Oui" : "Non",
+        `${netAmount.toLocaleString("fr-FR").replace(/\s/g, " ")} Ar`,
+        delivery.isSettled ? "Regle" : "En attente",
+      ];
+    });
+    
+    autoTable(doc, {
+      startY: 95,
+      head: [["Destinataire", "Date", "Collecte", "Frais", "Prepaye", "Frais payes", "Net", "Statut"]],
+      body: tableData,
+      theme: "striped",
+      headStyles: { fillColor: [71, 85, 105], textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 8, cellPadding: 3 },
+      columnStyles: {
+        0: { cellWidth: 35 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 22, halign: "right" },
+        3: { cellWidth: 20, halign: "right" },
+        4: { cellWidth: 18, halign: "center" },
+        5: { cellWidth: 20, halign: "center" },
+        6: { cellWidth: 22, halign: "right" },
+        7: { cellWidth: 22, halign: "center" },
+      },
+    });
+    
+    // Summary - Get Y position after table
+    const finalY = doc.lastAutoTable?.finalY || 150;
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.rect(14, finalY, pageWidth - 28, 35, "F");
+    
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.rect(14, finalY, pageWidth - 28, 35, "S");
+    
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("RECAPITULATIF", 20, finalY + 8);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Nombre de livraisons: ${clientData.deliveries.length}`, 20, finalY + 16);
+    doc.text(`Total frais collectes: ${clientData.totalDeliveryFees.toLocaleString("fr-FR").replace(/\s/g, " ")} Ar`, 20, finalY + 24);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    const settlementAmount = clientData.totalToSettle.toLocaleString("fr-FR").replace(/\s/g, " ");
+    const settlementText = clientData.totalToSettle >= 0 
+      ? `Montant a remettre: +${settlementAmount} Ar`
+      : `Montant a collecter: ${settlementAmount} Ar`;
+    doc.text(settlementText, pageWidth - 16, finalY + 30, { align: "right" });
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Document genere automatiquement par Tokana Delivery Management", pageWidth / 2, doc.internal.pageSize.height - 10, { align: "center" });
+    
+    // Save
+    const fileName = `Facture_${clientData.client.name.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(fileName);
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/50 p-6">
+      <div className="min-h-screen bg-slate-50 p-6">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-6 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 shadow-lg">
-            <h1 className="text-2xl font-bold text-white">Règlements clients J+1</h1>
-            <p className="text-purple-100 mt-1">
+          <div className="mb-6 bg-white border-l-4 border-l-slate-600 rounded-lg p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-slate-900">Règlements clients J+1</h1>
+            <p className="text-slate-600 mt-1">
               Versements aux clients le lendemain de la livraison
             </p>
           </div>
@@ -149,8 +265,8 @@ export default function SettlementsPage() {
             <CardContent className="py-12">
               <div className="flex flex-col items-center justify-center gap-4">
                 <div className="relative">
-                  <div className="h-16 w-16 rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin"></div>
-                  <DollarSign className="h-8 w-8 text-purple-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                  <div className="h-16 w-16 rounded-full border-4 border-slate-200 border-t-slate-600 animate-spin"></div>
+                  <DollarSign className="h-8 w-8 text-slate-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
                 </div>
                 <p className="text-slate-600 font-medium">Chargement des règlements...</p>
               </div>
@@ -162,17 +278,17 @@ export default function SettlementsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/50 p-6">
+    <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6 shadow-lg">
-          <h1 className="text-2xl font-bold text-white">Règlements clients J+1</h1>
-          <p className="text-purple-100 mt-1">
+        <div className="mb-6 bg-white border-l-4 border-l-slate-600 rounded-lg p-6 shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-900">Règlements clients J+1</h1>
+          <p className="text-slate-600 mt-1">
             Versements aux clients le lendemain de la livraison
           </p>
-          <div className="mt-3 flex items-start gap-2 bg-white/10 rounded-lg p-3">
-            <AlertCircle className="h-5 w-5 text-white/90 mt-0.5" />
-            <p className="text-sm text-white/90">
+          <div className="mt-3 flex items-start gap-2 bg-slate-100 rounded-lg p-3 border border-slate-200">
+            <AlertCircle className="h-5 w-5 text-slate-600 mt-0.5" />
+            <p className="text-sm text-slate-700">
               Seules les livraisons payées (PAID) dont la date prévue est passée sont affichées.
               Les montants positifs sont à remettre au client, les montants négatifs sont des frais à collecter.
             </p>
@@ -182,48 +298,48 @@ export default function SettlementsPage() {
         {/* Summary Cards */}
         {data && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <Card className="border-l-4 border-l-purple-500">
+            <Card className="border-l-4 border-l-slate-600 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-600">Total à remettre</p>
-                    <p className="text-2xl font-bold text-purple-600">
+                    <p className="text-sm text-slate-600 font-medium">Total à remettre</p>
+                    <p className="text-2xl font-bold text-slate-900">
                       {data.summary.totalToSettle.toLocaleString()} Ar
                     </p>
                   </div>
-                  <div className="bg-purple-100 p-3 rounded-lg">
-                    <DollarSign className="h-6 w-6 text-purple-600" />
+                  <div className="bg-slate-100 p-3 rounded-lg">
+                    <DollarSign className="h-6 w-6 text-slate-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border-l-4 border-l-green-500">
+            <Card className="border-l-4 border-l-emerald-600 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-600">Frais de livraison</p>
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-sm text-slate-600 font-medium">Frais de livraison</p>
+                    <p className="text-2xl font-bold text-emerald-700">
                       {data.summary.totalDeliveryFees.toLocaleString()} Ar
                     </p>
                   </div>
-                  <div className="bg-green-100 p-3 rounded-lg">
-                    <TrendingUp className="h-6 w-6 text-green-600" />
+                  <div className="bg-emerald-50 p-3 rounded-lg">
+                    <TrendingUp className="h-6 w-6 text-emerald-600" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border-l-4 border-l-blue-500">
+            <Card className="border-l-4 border-l-blue-600 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-600">Livraisons</p>
-                    <p className="text-2xl font-bold text-blue-600">
+                    <p className="text-sm text-slate-600 font-medium">Livraisons</p>
+                    <p className="text-2xl font-bold text-blue-700">
                       {data.summary.totalDeliveries}
                     </p>
                   </div>
-                  <div className="bg-blue-100 p-3 rounded-lg">
+                  <div className="bg-blue-50 p-3 rounded-lg">
                     <Package className="h-6 w-6 text-blue-600" />
                   </div>
                 </div>
@@ -238,7 +354,7 @@ export default function SettlementsPage() {
             <Button
               variant={filter === "pending" ? "default" : "outline"}
               onClick={() => setFilter("pending")}
-              className={`cursor-pointer ${filter === "pending" ? "bg-gradient-to-r from-purple-600 to-pink-600" : ""}`}
+              className={`cursor-pointer ${filter === "pending" ? "bg-slate-900 hover:bg-slate-800" : ""}`}
             >
               <AlertCircle className="h-4 w-4 mr-2" />
               En attente
@@ -246,7 +362,7 @@ export default function SettlementsPage() {
             <Button
               variant={filter === "settled" ? "default" : "outline"}
               onClick={() => setFilter("settled")}
-              className={`cursor-pointer ${filter === "settled" ? "bg-gradient-to-r from-green-600 to-emerald-600" : ""}`}
+              className={`cursor-pointer ${filter === "settled" ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
             >
               <CheckCircle2 className="h-4 w-4 mr-2" />
               Réglées
@@ -262,13 +378,13 @@ export default function SettlementsPage() {
           <div className="flex items-center gap-2 md:w-72">
             <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
               <Calendar className="h-4 w-4 inline mr-1" />
-              Livraisons jusqu'au :
+              Jusqu&apos;au :
             </label>
             <input
               type="date"
               value={maxDate}
               onChange={(e) => setMaxDate(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
         </div>
@@ -327,22 +443,22 @@ export default function SettlementsPage() {
               .map((clientData) => (
               <Card
                 key={clientData.client.id}
-                className="border-l-4 border-l-purple-500 shadow-md hover:shadow-lg transition-shadow"
+                className="border-l-4 border-l-slate-600 shadow-sm hover:shadow-md transition-shadow"
               >
-                <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
-                  <div className="flex items-start justify-between">
+                <CardHeader className="bg-slate-50">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <span className="font-bold text-purple-900">
+                      <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900">
                           {clientData.client.name}
                         </span>
                         <Badge
                           className={
                             clientData.deliveries.some((d) => !d.isSettled)
                               ? clientData.totalToSettle >= 0
-                                ? "bg-orange-100 text-orange-800"
-                                : "bg-red-100 text-red-800"
-                              : "bg-green-100 text-green-800"
+                                ? "bg-amber-100 text-amber-800 border-amber-300"
+                                : "bg-red-100 text-red-800 border-red-300"
+                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
                           }
                         >
                           {clientData.deliveries.filter((d) => !d.isSettled).length > 0
@@ -352,7 +468,7 @@ export default function SettlementsPage() {
                             : "Réglé"}
                         </Badge>
                       </CardTitle>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-slate-600">
+                      <div className="flex items-center gap-4 mt-2 text-sm text-slate-600 flex-wrap">
                         <div className="flex items-center gap-1">
                           <Phone className="h-4 w-4" />
                           {clientData.client.phone}
@@ -364,19 +480,28 @@ export default function SettlementsPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-slate-600">
+                      <div className="text-sm text-slate-600 font-medium mb-1">
                         {clientData.totalToSettle >= 0 ? "À remettre" : "Débit client"}
                       </div>
                       <div className={`text-2xl font-bold ${
                         clientData.totalToSettle >= 0 
-                          ? "bg-gradient-to-r from-purple-600 to-pink-600" 
-                          : "bg-gradient-to-r from-red-600 to-orange-600"
-                      } bg-clip-text text-transparent`}>
+                          ? "text-slate-900" 
+                          : "text-red-700"
+                      }`}>
                         {clientData.totalToSettle >= 0 ? "+" : ""}{clientData.totalToSettle.toLocaleString()} Ar
                       </div>
                       <div className="text-xs text-slate-500 mt-1">
-                        Frais collectés: {clientData.totalDeliveryFees.toLocaleString()} Ar
+                        Frais: {clientData.totalDeliveryFees.toLocaleString()} Ar
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateInvoice(clientData)}
+                        className="mt-2 w-full cursor-pointer hover:bg-slate-100"
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        Facture
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -445,7 +570,7 @@ export default function SettlementsPage() {
                               delivery.deliveryFeePrepaid ? (
                                 // Tout est payé
                                 <div className="text-sm text-slate-600">
-                                  <div className="text-xs">Tout payé d'avance</div>
+                                  <div className="text-xs">Tout payé d&apos;avance</div>
                                   <div className="font-semibold text-green-700">
                                     0 Ar
                                   </div>
@@ -511,8 +636,8 @@ export default function SettlementsPage() {
                       }
                       className={`w-full cursor-pointer ${
                         clientData.totalToSettle >= 0
-                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                          : "bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
+                          ? "bg-slate-900 hover:bg-slate-800"
+                          : "bg-red-600 hover:bg-red-700"
                       }`}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -548,7 +673,7 @@ export default function SettlementsPage() {
             <div className="py-4">
               <div className={`${
                 settleDialog.client.totalToSettle >= 0 
-                  ? "bg-purple-50 border-purple-200" 
+                  ? "bg-slate-50 border-slate-200" 
                   : "bg-red-50 border-red-200"
               } p-4 rounded-lg mb-4 border`}>
                 <div className="font-semibold text-slate-900 mb-2">
@@ -562,7 +687,7 @@ export default function SettlementsPage() {
                     {settleDialog.client.totalToSettle >= 0 ? "Montant à remettre:" : "Montant à collecter:"}
                   </span>
                   <span className={`text-2xl font-bold ${
-                    settleDialog.client.totalToSettle >= 0 ? "text-purple-600" : "text-red-600"
+                    settleDialog.client.totalToSettle >= 0 ? "text-slate-900" : "text-red-600"
                   }`}>
                     {settleDialog.client.totalToSettle >= 0 ? "+" : ""}
                     {settleDialog.client.totalToSettle.toLocaleString()} Ar
@@ -589,15 +714,15 @@ export default function SettlementsPage() {
 
               <div className={`${
                 settleDialog.client.totalToSettle >= 0 
-                  ? "bg-amber-50 border-amber-200" 
+                  ? "bg-blue-50 border-blue-200" 
                   : "bg-orange-50 border-orange-200"
               } rounded-lg p-3 border`}>
                 <div className="flex items-start gap-2">
                   <AlertCircle className={`h-5 w-5 mt-0.5 ${
-                    settleDialog.client.totalToSettle >= 0 ? "text-amber-600" : "text-orange-600"
+                    settleDialog.client.totalToSettle >= 0 ? "text-blue-600" : "text-orange-600"
                   }`} />
                   <div className={`text-sm ${
-                    settleDialog.client.totalToSettle >= 0 ? "text-amber-800" : "text-orange-800"
+                    settleDialog.client.totalToSettle >= 0 ? "text-blue-800" : "text-orange-800"
                   }`}>
                     {settleDialog.client.totalToSettle >= 0 
                       ? "Cette action marquera toutes les livraisons de ce client comme réglées."
@@ -618,7 +743,7 @@ export default function SettlementsPage() {
             <Button
               onClick={handleSettle}
               disabled={settleMutation.isPending}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              className="bg-slate-900 hover:bg-slate-800 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               {settleMutation.isPending ? (
                 <>

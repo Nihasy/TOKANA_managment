@@ -44,12 +44,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // Update delivery
+    // 1. Sauvegarder la date d'origine si c'est le premier report
+    // 2. Changer le status en POSTPONED pour qu'elle apparaisse dans "Terminées" de l'ancienne date
+    // 3. Mettre à jour plannedDate pour la nouvelle date
     const updatedDelivery = await prisma.delivery.update({
       where: { id },
       data: {
-        status: "POSTPONED",
+        status: "POSTPONED", // Marquer comme reportée
         postponedTo: new Date(postponedTo),
         plannedDate: new Date(postponedTo),
+        // Sauvegarder la date d'origine uniquement si c'est le premier report
+        originalPlannedDate: delivery.originalPlannedDate || delivery.plannedDate,
       },
       include: {
         sender: true,

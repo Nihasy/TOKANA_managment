@@ -2,6 +2,24 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/auth-utils"
 
+interface ClientSettlement {
+  client: {
+    id: string
+    name: string
+    phone: string
+  }
+  deliveries: Array<{
+    id: string
+    deliveryPrice: number
+    collectAmount: number | null
+    isPrepaid: boolean
+    deliveryFeePrepaid: boolean
+    status: string
+  }>
+  totalToSettle: number
+  totalDeliveryFees: number
+}
+
 // GET: Récupérer les livraisons à régler
 export async function GET(request: Request) {
   try {
@@ -21,8 +39,10 @@ export async function GET(request: Request) {
       maxDate.setHours(23, 59, 59, 999)
     }
 
-    const where: any = {
-      status: "PAID", // Seulement les livraisons payées
+    const where: Record<string, unknown> = {
+      status: {
+        in: ["DELIVERED", "PAID"], // Livraisons effectuées (livrées ou payées)
+      },
       plannedDate: {
         lte: maxDate, // Livraisons jusqu'à la date spécifiée (J+1)
       },
@@ -65,48 +85,57 @@ export async function GET(request: Request) {
       acc[delivery.senderId].deliveries.push(delivery)
       
       // Calculer le montant à remettre
-      // Logique de règlement :
-      // 1. isPrepaid = false, deliveryFeePrepaid = false : remettre (collectAmount - deliveryPrice)
-      // 2. isPrepaid = false, deliveryFeePrepaid = true : remettre tout collectAmount (frais déjà payés)
-      // 3. isPrepaid = true, deliveryFeePrepaid = false : déduire deliveryPrice (client doit payer frais)
-      // 4. isPrepaid = true, deliveryFeePrepaid = true : rien à faire (tout payé)
+      // Logique de règlement pour livraisons effectuées (DELIVERED ou PAID) :
+      // - DELIVERED : Seulement facturer les frais si prépayé sans frais payés
+      // - PAID : Calculer le montant complet selon les flags
       
       let amountToSettle = 0
       
-      if (!delivery.isPrepaid) {
-        // Le livreur a collecté de l'argent
-        if (delivery.deliveryFeePrepaid) {
-          // Les frais ont déjà été payés, on rend tout au client
-          amountToSettle = delivery.collectAmount || 0
-        } else {
-          // On déduit les frais de livraison
-          amountToSettle = (delivery.collectAmount || 0) - delivery.deliveryPrice
-        }
-      } else {
-        // isPrepaid = true (livraison prépayée)
-        if (!delivery.deliveryFeePrepaid) {
-          // Le client n'a pas payé les frais, on les déduit (montant négatif = débit)
+      if (delivery.status === "DELIVERED") {
+        // Livraison effectuée mais pas encore payée
+        if (delivery.isPrepaid && !delivery.deliveryFeePrepaid) {
+          // Prépayée mais frais non payés : client doit les frais
           amountToSettle = -delivery.deliveryPrice
         }
-        // Si deliveryFeePrepaid = true, rien à régler (tout est payé)
+        // Sinon, on attend le paiement (rien à régler pour l'instant)
+        
+      } else if (delivery.status === "PAID") {
+        // Livraison effectuée ET payée
+        if (!delivery.isPrepaid) {
+          // Le livreur a collecté de l'argent
+          if (delivery.deliveryFeePrepaid) {
+            // Les frais ont déjà été payés, on rend tout au client
+            amountToSettle = delivery.collectAmount || 0
+          } else {
+            // On déduit les frais de livraison
+            amountToSettle = (delivery.collectAmount || 0) - delivery.deliveryPrice
+          }
+        } else {
+          // isPrepaid = true (livraison prépayée)
+          if (!delivery.deliveryFeePrepaid) {
+            // Le client n'a pas payé les frais, on les déduit (montant négatif = débit)
+            amountToSettle = -delivery.deliveryPrice
+          }
+          // Si deliveryFeePrepaid = true, rien à régler (tout est payé)
+        }
       }
       
       acc[delivery.senderId].totalToSettle += amountToSettle
       acc[delivery.senderId].totalDeliveryFees += delivery.deliveryPrice
       
       return acc
-    }, {} as Record<string, any>)
+    }, {} as Record<string, ClientSettlement>)
 
     return NextResponse.json({
       clients: Object.values(groupedByClient),
       summary: {
         totalDeliveries: deliveries.length,
         totalToSettle: Object.values(groupedByClient).reduce(
-          (sum: number, client: any) => sum + client.totalToSettle,
+          (sum: number, client: ClientSettlement) => sum + client.totalToSettle,
           0
         ),
         totalDeliveryFees: Object.values(groupedByClient).reduce(
-          (sum: number, client: any) => sum + client.totalDeliveryFees,
+          (sum: number, client: ClientSettlement) => sum + client.totalDeliveryFees,
           0
         ),
       },

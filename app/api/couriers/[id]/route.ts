@@ -57,7 +57,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    const updateData: any = {
+    const updateData: {
+      email: string
+      name: string
+      phone: string
+      password?: string
+    } = {
       email: validatedData.email,
       name: validatedData.name,
       phone: validatedData.phone,

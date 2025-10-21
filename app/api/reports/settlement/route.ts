@@ -51,7 +51,8 @@ export async function GET(request: Request) {
     const nbLivraisons = deliveries.length
     const totalCollect = deliveries.reduce((sum, d) => sum + (d.collectAmount || 0), 0)
     const totalDeliveryFees = deliveries.reduce((sum, d) => sum + d.deliveryPrice, 0)
-    const totalARemettre = totalCollect + totalDeliveryFees
+    // Total à remettre = totalDue de toutes les livraisons (ce que le livreur a collecté)
+    const totalARemettre = deliveries.reduce((sum, d) => sum + d.totalDue, 0)
 
     return NextResponse.json({
       deliveries,
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
       },
       allCourierSettled,
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 }

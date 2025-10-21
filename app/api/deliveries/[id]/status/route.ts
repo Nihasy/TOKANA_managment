@@ -9,7 +9,7 @@ const statusSchema = z.object({
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   CREATED: ["PICKED_UP", "CANCELED"],
-  PICKED_UP: ["DELIVERED", "CANCELED"],
+  PICKED_UP: ["DELIVERED", "PAID", "CANCELED"], // Ajout de PAID pour le bouton "Livré & Payé"
   DELIVERED: ["PAID"],
   PAID: [],
   POSTPONED: ["PICKED_UP", "CANCELED"],

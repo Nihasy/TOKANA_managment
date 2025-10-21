@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Calendar, Pencil } from "lucide-react"
+import { Plus, Calendar, Pencil, Users, Truck, Filter } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Delivery {
@@ -51,41 +51,61 @@ interface Courier {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  CREATED: "bg-blue-100 text-blue-800",
+  CREATED: "bg-slate-100 text-slate-700",
   PICKED_UP: "bg-yellow-100 text-yellow-800",
   DELIVERED: "bg-green-100 text-green-800",
   PAID: "bg-emerald-100 text-emerald-800",
-  POSTPONED: "bg-orange-100 text-orange-800",
+  POSTPONED: "bg-purple-100 text-purple-800",
   CANCELED: "bg-red-100 text-red-800",
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  CREATED: "Créée",
-  PICKED_UP: "Récupérée",
-  DELIVERED: "Livrée",
-  PAID: "Payée",
-  POSTPONED: "Reportée",
-  CANCELED: "Annulée",
+// Removed unused STATUS_LABELS - using SIMPLIFIED_STATUS_LABELS instead
+
+interface Client {
+  id: string
+  name: string
+  phone: string
 }
 
 export default function DeliveriesPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const [date, setDate] = useState("")
+  const today = new Date().toISOString().split("T")[0]
+  const [startDate, setStartDate] = useState(today)
+  const [endDate, setEndDate] = useState(today)
   const [status, setStatus] = useState("ALL")
+  const [selectedClientId, setSelectedClientId] = useState("ALL")
+  const [selectedCourierId, setSelectedCourierId] = useState("ALL")
 
   const { data: deliveries = [], isLoading } = useQuery<Delivery[]>({
-    queryKey: ["deliveries", date, status],
+    queryKey: ["deliveries", startDate, endDate, status, selectedClientId, selectedCourierId],
     queryFn: async () => {
       const params = new URLSearchParams()
-      if (date) params.set("date", date)
+      if (startDate) params.set("startDate", startDate)
+      if (endDate) params.set("endDate", endDate)
       if (status !== "ALL") params.set("status", status)
+      if (selectedClientId !== "ALL") params.set("clientId", selectedClientId)
+      if (selectedCourierId !== "ALL") params.set("courierId", selectedCourierId)
       const res = await fetch(`/api/deliveries?${params}`)
       if (!res.ok) {
         const errorData = await res.json()
         throw new Error(errorData.error || "Erreur lors du chargement des livraisons")
       }
       return res.json() as Promise<Delivery[]>
+    },
+    retry: 2,
+  })
+
+  // Fetch clients
+  const { data: clients = [] } = useQuery<Client[]>({
+    queryKey: ["clients"],
+    queryFn: async () => {
+      const res = await fetch("/api/clients")
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Erreur lors du chargement des clients")
+      }
+      return res.json()
     },
     retry: 2,
   })
@@ -174,43 +194,199 @@ export default function DeliveriesPage() {
         </Link>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-2 flex-1">
-              <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
-              <Input 
-                type="date" 
-                value={date} 
-                onChange={(e) => setDate(e.target.value)} 
-                className="w-full sm:w-auto" 
-              />
+      <Card className="border-t-4 border-t-blue-500 shadow-md">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 py-3">
+          <div className="space-y-2.5">
+            {/* Titre Section Filtres - Compact */}
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-blue-500 rounded-md">
+                <Filter className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 leading-none">Filtres</h3>
+                <p className="text-xs text-slate-600 mt-0.5">Affinez vos résultats</p>
+              </div>
             </div>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Tous les statuts" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tous les statuts</SelectItem>
-                <SelectItem value="CREATED">Créée</SelectItem>
-                <SelectItem value="PICKED_UP">Récupérée</SelectItem>
-                <SelectItem value="DELIVERED">Livrée</SelectItem>
-                <SelectItem value="PAID">Payée</SelectItem>
-                <SelectItem value="POSTPONED">Reportée</SelectItem>
-                <SelectItem value="CANCELED">Annulée</SelectItem>
-              </SelectContent>
-            </Select>
-            {(date || status !== "ALL") && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setDate("")
-                  setStatus("ALL")
-                }}
-                className="cursor-pointer w-full sm:w-auto"
-              >
-                Réinitialiser
-              </Button>
+
+            {/* Ligne 1 : Dates avec style compact */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex items-center gap-2 flex-1 bg-white p-2 rounded-lg border-2 border-blue-200 shadow-sm hover:border-blue-400 transition-colors">
+                <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-md shrink-0">
+                  <Calendar className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="flex-1">
+                    <label className="text-xs font-medium text-slate-600 block leading-none mb-0.5">Du</label>
+                    <Input 
+                      type="date" 
+                      value={startDate} 
+                      onChange={(e) => setStartDate(e.target.value)} 
+                      className="w-full border-0 p-0 h-6 focus-visible:ring-0 text-sm" 
+                    />
+                  </div>
+                  <span className="text-slate-400 font-bold text-sm">→</span>
+                  <div className="flex-1">
+                    <label className="text-xs font-medium text-slate-600 block leading-none mb-0.5">Au</label>
+                    <Input 
+                      type="date" 
+                      value={endDate} 
+                      onChange={(e) => setEndDate(e.target.value)} 
+                      className="w-full border-0 p-0 h-6 focus-visible:ring-0 text-sm" 
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Ligne 2 : Filtres Client, Livreur, Statut - Compact */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {/* Filtre Client - Compact */}
+              <div className="bg-white p-2 rounded-lg border-2 border-emerald-200 shadow-sm hover:border-emerald-400 transition-colors">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="p-1 bg-gradient-to-br from-emerald-500 to-green-600 rounded">
+                    <Users className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <label className="text-xs font-semibold text-emerald-700 leading-none">Client</label>
+                </div>
+                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                  <SelectTrigger className="w-full border-0 p-0 h-7 focus:ring-0 text-sm">
+                    <SelectValue placeholder="Tous" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                        Tous les clients
+                      </div>
+                    </SelectItem>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                          {client.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filtre Livreur - Compact */}
+              <div className="bg-white p-2 rounded-lg border-2 border-orange-200 shadow-sm hover:border-orange-400 transition-colors">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="p-1 bg-gradient-to-br from-orange-500 to-amber-600 rounded">
+                    <Truck className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <label className="text-xs font-semibold text-orange-700 leading-none">Livreur</label>
+                </div>
+                <Select value={selectedCourierId} onValueChange={setSelectedCourierId}>
+                  <SelectTrigger className="w-full border-0 p-0 h-7 focus:ring-0 text-sm">
+                    <SelectValue placeholder="Tous" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                        Tous les livreurs
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="UNASSIGNED">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                        Non assigné
+                      </div>
+                    </SelectItem>
+                    {couriers.map((courier) => (
+                      <SelectItem key={courier.id} value={courier.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                          {courier.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filtre Statut - Compact */}
+              <div className="bg-white p-2 rounded-lg border-2 border-purple-200 shadow-sm hover:border-purple-400 transition-colors">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="p-1 bg-gradient-to-br from-purple-500 to-violet-600 rounded">
+                    <Filter className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <label className="text-xs font-semibold text-purple-700 leading-none">Statut</label>
+                </div>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="w-full border-0 p-0 h-7 focus:ring-0 text-sm">
+                    <SelectValue placeholder="Tous" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                        Tous les statuts
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="CREATED">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                        Créée
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="PICKED_UP">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-600"></div>
+                        Récupérée
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="DELIVERED">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-600"></div>
+                        Livrée
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="PAID">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-600"></div>
+                        Payée
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="POSTPONED">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-orange-600"></div>
+                        Reportée
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="CANCELED">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-600"></div>
+                        Annulée
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Bouton Réinitialiser - Compact */}
+            {(startDate !== today || endDate !== today || status !== "ALL" || selectedClientId !== "ALL" || selectedCourierId !== "ALL") && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setStartDate(today)
+                    setEndDate(today)
+                    setStatus("ALL")
+                    setSelectedClientId("ALL")
+                    setSelectedCourierId("ALL")
+                  }}
+                  className="cursor-pointer bg-gradient-to-r from-slate-100 to-slate-200 hover:from-slate-200 hover:to-slate-300 border-2 border-slate-300 text-slate-700 font-semibold shadow-sm hover:shadow-md transition-all h-7 text-xs px-3"
+                >
+                  <Filter className="h-3 w-3 mr-1.5" />
+                  Réinitialiser
+                </Button>
+              </div>
             )}
           </div>
         </CardHeader>
@@ -227,7 +403,7 @@ export default function DeliveriesPage() {
               {/* Vue Mobile - Cards */}
               <div className="block md:hidden space-y-4">
                 {deliveries.map((delivery) => (
-                  <Card key={delivery.id} className="border-l-4" style={{ borderLeftColor: delivery.status === 'CREATED' ? '#3b82f6' : delivery.status === 'PICKED_UP' ? '#eab308' : delivery.status === 'DELIVERED' ? '#22c55e' : delivery.status === 'PAID' ? '#10b981' : delivery.status === 'POSTPONED' ? '#f97316' : '#ef4444' }}>
+                  <Card key={delivery.id} className="border-l-4" style={{ borderLeftColor: delivery.status === 'CREATED' ? '#64748b' : delivery.status === 'PICKED_UP' ? '#eab308' : delivery.status === 'DELIVERED' ? '#22c55e' : delivery.status === 'PAID' ? '#10b981' : delivery.status === 'POSTPONED' ? '#a855f7' : '#ef4444' }}>
                     <CardContent className="p-4 space-y-3">
                       {/* En-tête avec date et statut */}
                       <div className="flex items-start justify-between gap-2">

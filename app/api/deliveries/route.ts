@@ -10,11 +10,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
 
     const date = searchParams.get("date");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const status = searchParams.get("status");
     const courierId = searchParams.get("courierId");
+    const clientId = searchParams.get("clientId");
     const assignedToMe = searchParams.get("assignedToMe");
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     // If courier, only show their deliveries
     if (session.user.role === "COURIER") {
@@ -22,15 +25,41 @@ export async function GET(request: Request) {
     } else if (assignedToMe === "true") {
       where.courierId = session.user.id;
     } else if (courierId) {
-      where.courierId = courierId;
+      if (courierId === "UNASSIGNED") {
+        where.courierId = null;
+      } else {
+        where.courierId = courierId;
+      }
     }
 
+    // Filtre par client
+    if (clientId) {
+      where.senderId = clientId;
+    }
+
+    // Filtre par date (ancien système pour compatibilité)
     if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-      where.plannedDate = { gte: startDate, lte: endDate };
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      // Inclure les livraisons dont plannedDate OU originalPlannedDate correspond à la date
+      where.OR = [
+        { plannedDate: { gte: start, lte: end } },
+        { originalPlannedDate: { gte: start, lte: end } },
+      ];
+    }
+    // Nouveau système : plage de dates (startDate -> endDate)
+    else if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      // Inclure les livraisons dont plannedDate OU originalPlannedDate est dans la plage
+      where.OR = [
+        { plannedDate: { gte: start, lte: end } },
+        { originalPlannedDate: { gte: start, lte: end } },
+      ];
     }
 
     if (status) {
@@ -61,7 +90,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(deliveries);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }
